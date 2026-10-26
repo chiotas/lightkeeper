@@ -51,6 +51,16 @@ assert.deepEqual(s.validate({ clock: '12', veil: 42.4, openAtPowerOn: false }, k
 assert.equal(s.DEFAULTS.openApps, false); // the Home looks as before until it is turned on
 // The tile selected at start, the last opened as up to 1.0.8, or the first; the gear shown unless hidden.
 assert.equal(s.DEFAULTS.startTile, 'last'); assert.equal(s.DEFAULTS.hideGear, false);
+// The clock and weather on the left, as always, or on the right.
+assert.equal(s.DEFAULTS.clockSide, 'left');
+assert.deepEqual(s.validate({ clockSide: 'right' }, keys), { clockSide: 'right' });
+assert.deepEqual(s.validate({ clockSide: 'left' }, keys), { clockSide: 'left' });
+['centre', 'Right', '', null, 1].forEach(function (v) { assert.equal(s.validate({ clockSide: v }, keys), 'clockSide', JSON.stringify(v)); });
+// Where each digit's ink ends, for every style the clock has, with the "M" of AM/PM.
+var logosDx = (function () { var ctx = {}; require('vm').runInNewContext(fs.readFileSync(path.join(__dirname, '..', 'app', 'logos.js'), 'utf8'), ctx); return ctx.RIENTRO_DX; })();
+['thin', 'bold', 'classic', 'mono', 'rounded', 'digital'].forEach(function (st) {
+  assert.ok(logosDx[st] && logosDx[st].length === 11 && logosDx[st].every(function (x) { return x >= 0 && x < 0.2; }), st);
+});
 assert.deepEqual(s.validate({ startTile: 'first', hideGear: true }, keys), { startTile: 'first', hideGear: true });
 ['second', '', null, 1].forEach(function (v) { assert.equal(s.validate({ startTile: v }, keys), 'startTile'); });
 ['yes', 0].forEach(function (v) { assert.equal(s.validate({ hideGear: v }, keys), 'hideGear'); });
@@ -368,7 +378,25 @@ assert.equal(logos.rientroOra('digital', '8:41'), '-0.099em');
 });
 assert.ok(!logos.RIENTRO_ORA.thin);
 var homeHtml = fs.readFileSync(path.join(__dirname, '..', 'app', 'index.html'), 'utf8');
-assert.ok(/ora\.style\.marginLeft = rientroOra\(cfg\.clockStyle, ora\.textContent\)/.test(homeHtml), 'the Home lines the clock up');
+assert.ok(/allineaOra\(ora, meteoEl, cfg\)/.test(homeHtml), 'the Home lines the clock up');
+// On the left as always; on the right, the clock and the weather moved by their ink's distance from the edge.
+function finto(testo, piccolo) {
+  return { style: {}, textContent: testo, getElementsByTagName: function (t) { return t === 'small' && piccolo ? [piccolo] : []; } };
+}
+var oraS = finto('8:41'), meteoS = finto('Rome \u00b7 12\u00b0');
+logos.allineaOra(oraS, meteoS, { clockStyle: 'digital' });
+assert.deepEqual([oraS.style.marginLeft, oraS.style.marginRight, meteoS.style.marginRight], ['-0.099em', '', '']);
+logos.getComputedStyle = function (el) { return el.css; };
+var oraD = finto('21:47'), meteoD = finto('Rome \u00b7 12\u00b0');
+oraD.css = { fontSize: '150px', letterSpacing: '-3px' }; meteoD.css = { fontSize: '34px' };
+logos.allineaOra(oraD, meteoD, { clockStyle: 'thin', clockSide: 'right' });
+assert.equal(oraD.style.marginLeft, '');
+assert.ok(Math.abs(parseFloat(oraD.style.marginRight) - -(logos.RIENTRO_DX.thin[7] * 150 - 3)) < 1e-9, oraD.style.marginRight);
+assert.ok(Math.abs(parseFloat(meteoD.style.marginRight) - -(logos.RIENTRO_DX.deg * 34)) < 1e-9, meteoD.style.marginRight);
+var pm = finto('PM'); pm.css = { fontSize: '52px', letterSpacing: '1.04px' };
+var oraP = finto('9:41PM', pm);
+logos.allineaOra(oraP, finto(''), { clockStyle: 'classic', clockSide: 'right' });
+assert.ok(Math.abs(parseFloat(oraP.style.marginRight) - -(logos.RIENTRO_DX.classic[10] * 52 + 1.04)) < 1e-9, oraP.style.marginRight);
 assert.ok(homeHtml.indexOf('#ora { font-size: 150px; font-weight: 200; line-height: 1; letter-spacing: -.02em; }') !== -1, 'the default clock rule is unchanged');
 ['classic', 'mono', 'rounded', 'digital'].forEach(function (n) {
   var f = path.join(__dirname, '..', 'app', 'clock', n + '.woff2');

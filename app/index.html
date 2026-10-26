@@ -32,8 +32,17 @@ body {
     radial-gradient(1100px 620px at 0 0, rgba(18,13,8,.92) 0, rgba(18,13,8,0) 100%),
     linear-gradient(to top, rgba(18,13,8,1) 0, rgba(18,13,8,.7) 20%, rgba(18,13,8,0) 50%);
 }
+/* With the clock on the right, dark from the top right instead. */
+#veil.dx {
+  background:
+    radial-gradient(1100px 620px at 100% 0, rgba(18,13,8,.92) 0, rgba(18,13,8,0) 100%),
+    linear-gradient(to top, rgba(18,13,8,1) 0, rgba(18,13,8,.7) 20%, rgba(18,13,8,0) 50%);
+}
 header, nav, #hint { position: absolute; left: 112px; }
 header { top: 68px; }
+/* The clock and weather on the right, as far from the edge as on the left. */
+header.dx { left: auto; right: 112px; text-align: right; }
+header.dx #meteo { -webkit-justify-content: flex-end; justify-content: flex-end; }
 #ora { font-size: 150px; font-weight: 200; line-height: 1; letter-spacing: -.02em; }
 #ora small { font-size: 52px; font-weight: 300; letter-spacing: .02em; margin-left: 14px; }
 /* Other styles and sizes for the clock; without a class it is Jost 200 at 150 px, as always. */
@@ -149,7 +158,7 @@ body.pannello .freccia { visibility: hidden; }
 </head>
 <body>
 <div id="veil"></div>
-<header><div id="ora"></div><div id="meteo"></div></header>
+<header id="testa"><div id="ora"></div><div id="meteo"></div></header>
 <nav></nav>
 <a class="freccia" id="fr-sx" aria-label="Back along the row"></a><a class="freccia" id="fr-dx" aria-label="On along the row"></a>
 <div id="hint"></div>
@@ -317,6 +326,7 @@ function sfondo(url) {
 
 function disegna() {
   ora.className = classeOra(cfg);
+  document.getElementById('testa').className = veil.className = cfg.clockSide === 'right' ? 'dx' : '';
   // Names only; logos, or the TV's icon where an app has none; the TV's icons. Inputs show their device.
   var modo = cfg.tileStyle === 'logo' || cfg.tileStyle === 'icon' ? cfg.tileStyle : 'text';
   nav.className = modo === 'text' ? '' : 'icons' + (cfg.labels === 'none' ? ' bare' : cfg.labels === 'selected' ? ' only-sel' : '');
@@ -587,6 +597,7 @@ function meteo() {
       var c = JSON.parse(x.responseText).current;
       meteoEl.textContent = w.name + ' · ' + Math.round(c.temperature_2m) + '°';
       meteoEl.insertAdjacentHTML('beforeend', icona(c.weather_code, c.is_day));
+      allineaOra(ora, meteoEl, cfg);
     } catch (e) {}
   };
   x.send();
@@ -596,7 +607,7 @@ function aggiorna() {
   var d = new Date(), h = d.getHours(), m = (d.getMinutes() < 10 ? ':0' : ':') + d.getMinutes();
   if (cfg.clock === '12') ora.innerHTML = ((h + 11) % 12 + 1) + m + '<small>' + (h < 12 ? 'AM' : 'PM') + '</small>';
   else ora.textContent = h + m;
-  ora.style.marginLeft = rientroOra(cfg.clockStyle, ora.textContent);
+  allineaOra(ora, meteoEl, cfg);
   var per = cfg.weather ? cfg.weather.lat + ',' + cfg.weather.lon + ',' + cfg.units : '';
   if (per !== meteoPer || Date.now() - meteoAlle > 15 * 60000) meteo();
 }

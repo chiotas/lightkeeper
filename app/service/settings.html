@@ -66,8 +66,15 @@ button, input, select { font: inherit; color: inherit; }
     radial-gradient(1100px 620px at 0 0, rgba(18,13,8,.92) 0, rgba(18,13,8,0) 100%),
     linear-gradient(to top, rgba(18,13,8,1) 0, rgba(18,13,8,.7) 20%, rgba(18,13,8,0) 50%);
 }
+.screen .veil.dx {
+  background:
+    radial-gradient(1100px 620px at 100% 0, rgba(18,13,8,.92) 0, rgba(18,13,8,0) 100%),
+    linear-gradient(to top, rgba(18,13,8,1) 0, rgba(18,13,8,.7) 20%, rgba(18,13,8,0) 50%);
+}
 .screen header, .screen nav { position: absolute; left: 112px; }
 .screen header { top: 68px; }
+.screen header.dx { left: auto; right: 112px; text-align: right; }
+.screen header.dx .meteo { -webkit-justify-content: flex-end; justify-content: flex-end; }
 .screen .ora { font-size: 150px; font-weight: 200; line-height: 1; letter-spacing: -.02em; }
 .screen .ora small { font-size: 52px; font-weight: 300; letter-spacing: .02em; margin-left: 14px; }
 .ora.st-classic { font-family: 'LK Classic', Jost, serif; font-weight: 300; letter-spacing: 0; -webkit-font-feature-settings: 'lnum'; font-feature-settings: 'lnum'; }
@@ -408,6 +415,13 @@ footer a { color: var(--muted); }
             <label><input type="radio" name="clockSize" value="large"><span data-t="sizeLarge">Large</span></label>
           </div>
         </div>
+        <div class="row">
+          <span class="label" id="l-clockside" data-t="clockSide">Position</span>
+          <div class="seg" role="radiogroup" aria-labelledby="l-clockside">
+            <label><input type="radio" name="clockSide" value="left"><span data-t="sideLeft">Left</span></label>
+            <label><input type="radio" name="clockSide" value="right"><span data-t="sideRight">Right</span></label>
+          </div>
+        </div>
         <div class="search">
           <label for="city" class="label" data-t="weatherFor">Weather for</label>
           <input type="search" id="city" autocomplete="off" spellcheck="false" placeholder="Search for a city">
@@ -557,7 +571,7 @@ footer a { color: var(--muted); }
       iconSearch: 'Search icons', iconNone: 'No icon by that name.', close: 'Close', iconChange: 'Change the icon of ',
       gen_browser: 'Browser', gen_gallery: 'Gallery', gen_apps: 'Apps', gen_media: 'Media', gen_home: 'Home', gen_sport: 'Sport',
       gen_tv: 'TV', gen_console: 'Console', gen_hdmi: 'HDMI',
-      clockStyle: 'Style', clockSize: 'Size', sizeSmall: 'Small', sizeMedium: 'Medium', sizeLarge: 'Large',
+      clockStyle: 'Style', clockSize: 'Size', clockSide: 'Position', sideLeft: 'Left', sideRight: 'Right', sizeSmall: 'Small', sizeMedium: 'Medium', sizeLarge: 'Large',
       clock_thin: 'Thin', clock_classic: 'Classic', clock_bold: 'Bold', clock_mono: 'Monospaced', clock_rounded: 'Rounded', clock_digital: 'Digital',
       updTitle: 'Updates', updGo: 'Update', updChecking: 'Looking for a newer version…', updLatest: 'This is the latest version.',
       updAvailable: ' is available.', updNoCheck: 'Could not look for a newer version: ', updWorking: 'Downloading and checking the package…',
@@ -660,8 +674,10 @@ footer a { color: var(--muted); }
     $('p-veil').style.opacity = $('veil').value / 100;
     $('p-ora').innerHTML = clockText();
     $('p-ora').className = 'ora ' + classeOra(cfg);
-    $('p-ora').style.marginLeft = rientroOra(cfg.clockStyle, $('p-ora').textContent);
+    $('p-ora').parentNode.className = cfg.clockSide === 'right' ? 'dx' : '';
+    $('p-veil').className = 'veil' + (cfg.clockSide === 'right' ? ' dx' : '');
     meteo();
+    allineaOra($('p-ora'), $('p-meteo'), cfg);
     var nav = $('p-nav'), modo = cfg.tileStyle === 'logo' || cfg.tileStyle === 'icon' ? cfg.tileStyle : 'text';
     nav.className = modo === 'text' ? '' : 'icons' + (cfg.labels === 'none' ? ' bare' : cfg.labels === 'selected' ? ' only-sel' : '');
     $('labels-row').hidden = modo === 'text';
@@ -732,6 +748,7 @@ footer a { color: var(--muted); }
         el.textContent = w.name + ' · ' + Math.round(c.temperature_2m) + '°';
         el.insertAdjacentHTML('beforeend', icona(c.weather_code, c.is_day));
         meteoRiga = el.innerHTML;
+        allineaOra($('p-ora'), el, cfg);
       } catch (e) {}
     };
     x.send();
@@ -1601,6 +1618,7 @@ footer a { color: var(--muted); }
     radios('clock', cfg.clock, function (v) { save({ clock: v }); });
     renderClockStyles();
     radios('clockSize', cfg.clockSize || 'medium', function (v) { save({ clockSize: v }); });
+    radios('clockSide', cfg.clockSide || 'left', function (v) { save({ clockSide: v }); });
     radios('units', cfg.units, function (v) { save({ units: v }); });
     var size = '1920';
     try { size = localStorage.getItem('size') || size; } catch (e) {}
@@ -1664,7 +1682,7 @@ footer a { color: var(--muted); }
   setInterval(function () {
     if (!cfg || $('page').hidden) return;
     $('p-ora').innerHTML = clockText();
-    $('p-ora').style.marginLeft = rientroOra(cfg.clockStyle, $('p-ora').textContent);
+    allineaOra($('p-ora'), $('p-meteo'), cfg);
     var times = document.querySelectorAll('#clockstyles .ora');
     for (var i = 0; i < times.length; i++) times[i].innerHTML = clockText();
   }, 10000);

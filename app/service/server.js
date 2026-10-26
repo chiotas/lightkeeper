@@ -107,6 +107,7 @@ var DEFAULTS = {
   clock: '24',
   clockStyle: 'thin',
   clockSize: 'medium',
+  clockSide: 'left',
   units: 'c',
   weather: null,
   tiles: null,
@@ -371,6 +372,8 @@ function validate(body, keyNames) {
     if (k === 'clock') { if (v !== '24' && v !== '12') return 'clock'; out[k] = v; }
     else if (k === 'clockStyle') { if (CLOCK_STYLES.indexOf(v) === -1) return 'clockStyle'; out[k] = v; }
     else if (k === 'clockSize') { if (CLOCK_SIZES.indexOf(v) === -1) return 'clockSize'; out[k] = v; }
+    // The clock and weather on the left, as always, or on the right.
+    else if (k === 'clockSide') { if (v !== 'left' && v !== 'right') return 'clockSide'; out[k] = v; }
     else if (k === 'units') { if (v !== 'c' && v !== 'f') return 'units'; out[k] = v; }
     else if (k === 'tileStyle') { if (['text', 'logo', 'icon'].indexOf(v) === -1) return 'tileStyle'; out[k] = v; }
     // Names under logos and icons: all of them, the selected one's only, or none.
