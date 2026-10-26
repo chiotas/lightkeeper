@@ -100,6 +100,18 @@ assert.deepEqual(s.validate({ tiles: [{ id: 'com.webos.app.hdmi1', title: 'x', d
   assert.equal(s.validate({ tiles: [{ id: 'netflix', title: 'x', logo: v }] }, keys), 'tiles', String(v));
 });
 assert.ok(Object.keys(s.CATALOG).length > 100 && s.CATALOG.hdmi && s.CATALOG.netflix && s.CATALOG.arte);
+// Every background the app carries: 1920 × 1080 with a 384 × 216 copy, a credit, and a link for those not its own.
+JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'app', 'backgrounds', 'index.json'), 'utf8')).forEach(function (b) {
+  var dir = path.join(__dirname, '..', 'app', 'backgrounds');
+  assert.ok(/^[a-z0-9-]+$/.test(b.id) && b.title && b.short && b.by && ['pd', 'cc0', 'ccbysa', 'rights', 'own'].indexOf(b.licence) !== -1, b.id);
+  assert.ok(b.licence === 'own' || /^https:\/\//.test(b.link), b.id + ' link');
+  assert.deepEqual(s.jpegSize(fs.readFileSync(path.join(dir, b.id + '.jpg'))), { width: 1920, height: 1080 }, b.id);
+  assert.deepEqual(s.jpegSize(fs.readFileSync(path.join(dir, 'thumbs', b.id + '.jpg'))), { width: 384, height: 216 }, b.id + ' thumb');
+});
+// Each licence a background names has its words in the settings page.
+['pd', 'cc0', 'ccbysa', 'rights', 'own'].forEach(function (l) {
+  assert.ok(new RegExp('\\b' + l + ": '").test(fs.readFileSync(path.join(__dirname, '..', 'app', 'service', 'settings.html'), 'utf8')), l);
+});
 
 // Open apps the Home may close: those a tile could open, never Lightkeeper, an input,
 // Live TV, an app kept hidden or LG's Home, even when LG lists it as visible.

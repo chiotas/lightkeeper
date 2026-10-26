@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.10 (not released yet)
+
+- **Ten seascapes by Ivan Aivazovsky** among the backgrounds Lightkeeper carries, nineteen in all: *The Ninth Wave*, *The Black Sea*, *The Wave*, *Among the Waves*, *The Rainbow*, *Gathering Storm*, *The Storm*, *Seascape with Full Moon*, *Sunset at Sea* and a *Seascape*. They come from Wikimedia Commons, cropped to 16:9 at 1920 × 1080 like the others, and the settings link each one's page. *The Wave* is a photograph taken in the museum, credited to its photographer under CC BY-SA 3.0; *The Rainbow* exists there only at 1539 pixels wide, so it is enlarged and a little soft.
+
 ## 1.0.9 (26 October 2026)
 
 - **The Magic Remote's pointer slides the row.** A pointer on a tile only selects it, so a row wider than the screen could be browsed with the arrow keys alone. While the pointer shows, an arrow at each end where there is more slides the row by most of a screen: click it, or rest the pointer on it. The wheel slides it too. The arrow keys work as before. Built on LG's documented pointer events and tried on a computer, not yet with a real Magic Remote.
