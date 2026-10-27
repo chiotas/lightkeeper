@@ -987,6 +987,29 @@ function pngSize(b) {
 
 var keyStatus = 'off';
 
+/*
+ * The key asks the TV again while it waits. The status is put as set at each
+ * start, but a GlassHouse installed after Lightkeeper, or one that has only
+ * now put its filter in the chain, leaves the old word here: the settings page
+ * would keep saying pending or no GlassHouse over a key that works, until the
+ * server restarted. Reading the settings (which the page does every few
+ * seconds) asks again, at most once a minute; the read answers with what is
+ * known then and the next one carries the new word. applyKey writes nothing
+ * new when all is as set, and nothing at all where GlassHouse is still absent.
+ */
+var KEY_RECHECK_MS = +(process.env.LIGHTKEEPER_KEY_RECHECK || 60000);
+var keyRecheckedAt = 0;
+function recheckKey() {
+  if (keyStatus !== 'pending' && keyStatus !== 'noglasshouse') return;
+  if (config.key === 'none') return;
+  var now = Date.now();
+  if (now - keyRecheckedAt < KEY_RECHECK_MS) return;
+  keyRecheckedAt = now;
+  applyKey(config.key, function (state) {
+    if (state !== keyStatus) { keyStatus = state; log('key: ' + state); }
+  });
+}
+
 function handle(req, res) {
   if (!isLocal(req.socket.remoteAddress)) return send(res, 403, { ok: false, error: 'local network only' });
   if (!hostOk(req)) return send(res, 403, { ok: false, error: 'use the TV\'s address' });
@@ -1042,6 +1065,7 @@ function handle(req, res) {
   // it holds nothing secret.
   if (m === 'GET' && p === '/api/config') {
     var c = publicConfig();
+    recheckKey();
     c.keyStatus = keyStatus;
     return send(res, 200, c, { 'Access-Control-Allow-Origin': '*' });
   }

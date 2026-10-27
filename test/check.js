@@ -30,7 +30,8 @@ var env = {
   LIGHTKEEPER_PORT: '18090',
   LIGHTKEEPER_PORT_FILE: path.join(tmp, 'port'),
   LIGHTKEEPER_SESSION: path.join(tmp, 'session'), // the boot hook's mark for each time the TV is on
-  LIGHTKEEPER_DF: path.join(tmp, 'df') // df, answering with the free space in tmp/df-free, in KB
+  LIGHTKEEPER_DF: path.join(tmp, 'df'), // df, answering with the free space in tmp/df-free, in KB
+  LIGHTKEEPER_KEY_RECHECK: '0' // the key status asks the TV again at every read, not once a minute
 };
 fs.writeFileSync(env.LIGHTKEEPER_DF, '#!/bin/sh\necho "Filesystem 1K-blocks Used Available Use% Mounted on"\n' +
   'echo "/dev/fake 20971520 1 $(cat ' + path.join(tmp, 'df-free') + ') 1% /var"\n', { mode: 493 });
@@ -555,6 +556,25 @@ function httpChecks() {
     function (next) { var o = json({ clock: '12' }); o.headers.Origin = 'http://evil.example'; req('POST', '/api/config', o, function (st) { assert.equal(st, 415); next(); }); },
     function (next) { req('POST', '/api/config', json({ clock: '12', veil: 60 }), function (st, j) { assert.equal(st, 200); assert.equal(j.config.clock, '12'); next(); }); },
     function (next) { req('POST', '/api/config', json({ run: 'rm -rf /' }), function (st, j) { assert.equal(st, 400); assert.equal(j.error, 'invalid: run'); next(); }); },
+    // The key renews its own status: a GlassHouse that came up after Lightkeeper
+    // (or, as here, a filter that only now reaches the chain) is found by a read
+    // of the settings, with no restart of the server. The read that asks answers
+    // with the old word; the next carries the new one.
+    function (next) {
+      try { fs.unlinkSync(path.join(FAKE, 'chain-has-filter')); } catch (e) {}
+      req('POST', '/api/config', json({ key: 'home' }), function (st, j) {
+        assert.equal(st, 200); assert.equal(j.keyStatus, 'pending'); next(); });
+    },
+    function (next) {
+      fs.writeFileSync(path.join(FAKE, 'chain-has-filter'), '');
+      req('GET', '/api/config', {}, function (st, j) {
+        assert.equal(j.keyStatus, 'pending');
+        setTimeout(function () {
+          req('GET', '/api/config', {}, function (st2, j2) {
+            assert.equal(j2.keyStatus, 'active'); next(); });
+        }, 400);
+      });
+    },
     function (next) { req('GET', '/api/tv', {}, function (st, j) {
       assert.equal(st, 200);
       assert.deepEqual(j.inputs.map(function (i) { return i.title; }), ['HDMI 1', 'HDMI 2', 'Game console', 'Live TV']);
