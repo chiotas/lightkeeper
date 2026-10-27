@@ -82,7 +82,8 @@ var IMMAGINI = {"chromecast": [1981, 240], "discoveryplus": [1185, 221], "disney
   "rtpplay": [1174, 240], "opto": [715, 202], "skyshowtime": [1028, 238], "nrktv": [1118, 240],
   "yleareena": [1601, 240], "npostart": [340, 228], "player": [742, 239], "polsatboxgo": [494, 240],
   "voyo": [936, 240], "ertflix": [1080, 240], "megogo": [417, 240], "eurosport": [2068, 240], "euronews": [240,
-  240], "france24": [240, 240], "dw": [413, 236], "skynews": [967, 240]};
+  240], "france24": [240, 240], "dw": [413, 236], "skynews": [967, 240],
+  "skyq": [647, 236]};
 // Their services' names, for the settings' icon grid.
 var IMMAGINI_NOMI = {"3sat": "3sat", "abc": "ABC", "amazonalexa": "Alexa", "amazonluna": "Amazon Luna",
   "amazonmusic": "Amazon Music", "ardmediathek": "ARD Mediathek", "arte": "ARTE", "atresplayer": "atresplayer",
@@ -100,7 +101,7 @@ var IMMAGINI_NOMI = {"3sat": "3sat", "abc": "ABC", "amazonalexa": "Alexa", "amaz
   "pbskids": "PBS KIDS", "peacock": "Peacock", "philo": "Philo", "player": "Player", "plutotv": "Pluto TV",
   "polsatboxgo": "Polsat Box Go", "primevideo": "Prime Video", "qobuz": "Qobuz", "raiplay": "RaiPlay",
   "rakutentv": "Rakuten TV", "rtpplay": "RTP Play", "rtveplay": "RTVE Play", "shudder": "Shudder",
-  "siriusxm": "SiriusXM", "skygo": "Sky Go", "skynews": "Sky News", "skyshowtime": "SkyShowtime",
+  "siriusxm": "SiriusXM", "skygo": "Sky Go", "skynews": "Sky News", "skyq": "Sky Q", "skyshowtime": "SkyShowtime",
   "slingtv": "Sling TV", "srf": "SRF Play", "stirr": "STIRR", "telemundo": "Telemundo", "timvision": "TIMvision",
   "tunein": "TuneIn", "uktvplay": "U", "univision": "Univision", "vix": "ViX", "voyo": "Voyo",
   "waipu": "waipu.tv", "wow": "WOW", "xbox": "Xbox", "xumoplay": "Xumo Play", "yleareena": "Yle Areena",
@@ -207,7 +208,7 @@ var LOGHI_TITOLI = { netflix: 'netflix', youtube: 'youtube', plex: 'plex', spoti
   skyshowtime: 'skyshowtime', nrk: 'nrktv', nrktv: 'nrktv', yleareena: 'yleareena', areena: 'yleareena',
   npo: 'npostart', npostart: 'npostart', npoplus: 'npostart', player: 'player', playerpl: 'player',
   polsatboxgo: 'polsatboxgo', voyo: 'voyo', ertflix: 'ertflix', megogo: 'megogo', eurosport: 'eurosport',
-  euronews: 'euronews', france24: 'france24', dw: 'dw', dwtv: 'dw', skynews: 'skynews'};
+  euronews: 'euronews', france24: 'france24', dw: 'dw', dwtv: 'dw', skynews: 'skynews', skyq: 'skyq'};
 
 function eIngresso(id) { return /^com\.webos\.app\.(hdmi|livetv$)/.test(id); }
 

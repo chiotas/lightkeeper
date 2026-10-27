@@ -321,6 +321,9 @@ assert.equal(logos.logoDi({ id: 'netflix', title: 'Netflix' }, 'icon'), ''); // 
 assert.equal(logos.logoDi({ id: 'amazon', title: 'Prime Video' }, 'logo'), 'primevideo');
 assert.equal(logos.logoDi({ id: 'it.rai.raiplay', title: 'RaiPlay' }, 'logo'), 'raiplay');
 assert.equal(logos.logoDi({ id: 'some.app', title: 'Some App' }, 'logo'), ''); // no logo: the TV's icon
+// Sky Q (#9): by an app's title, and picked for an HDMI input.
+assert.equal(logos.logoDi({ id: 'some.app', title: 'Sky Q' }, 'logo'), 'skyq');
+assert.equal(logos.logoDi({ id: 'com.webos.app.hdmi2', title: 'HDMI 2', logo: 'skyq' }, 'icon'), 'skyq');
 assert.equal(logos.logoDi({ id: 'com.webos.app.browser', title: 'Browser Web' }, 'logo'), 'browser');
 assert.equal(logos.logoDi({ id: 'com.webos.app.livetv', title: 'Canali TV' }, 'text'), 'tv');
 assert.equal(logos.logoDi({ id: 'com.webos.app.hdmi3', title: 'PlayStation 5' }, 'icon'), 'playstation5');
