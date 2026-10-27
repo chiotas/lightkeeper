@@ -226,11 +226,15 @@ li .sub.url { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bgs img { display: block; width: 100%; height: auto; border-radius: 8px; background: #000; transition: opacity .18s; }
 .bgs .tile > button[role]:hover img { opacity: .85; }
 /* A picture of yours: the cross that takes it away. */
-.bgs .del {
+.bgs .del, .mio .del {
   position: absolute; top: 8px; left: 8px; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 50%;
   background: rgba(18, 14, 10, .78); color: var(--ink); font: inherit; font-size: 18px; line-height: 28px; text-align: center; cursor: pointer;
 }
-.bgs .del:hover, .bgs .del:focus { background: var(--ink); color: var(--ground); }
+.bgs .del:hover, .bgs .del:focus, .mio .del:hover, .mio .del:focus { background: var(--ink); color: var(--ground); }
+/* A logo of yours in the catalogue, with its cross. */
+.mio { position: relative; }
+.logo-up { margin-bottom: 18px; }
+.logo-up .actions { margin-top: 12px; }
 .bgs button[aria-checked=true] img { outline: 2px solid var(--ink); outline-offset: 2px; }
 .bgs span { display: block; margin-top: 7px; font-size: 14px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .bgs button[aria-checked=true] span { color: var(--ink); }
@@ -507,6 +511,14 @@ footer a { color: var(--muted); }
 <div class="picker" id="picker" hidden role="dialog" aria-modal="true" aria-labelledby="picker-title">
   <div class="picker-box">
     <div class="picker-head"><h2 id="picker-title">Icon</h2><button class="btn" type="button" id="picker-close" data-t="close">Close</button></div>
+    <div class="logo-up">
+      <p class="note" data-t="logoRules">Your own logo: a PNG with a transparent background and the logo in white, at least 240 pixels on its longer side. Lightkeeper trims the empty edges and keeps it at most 240 pixels tall and 2000 wide.</p>
+      <div class="actions">
+        <input class="file" type="file" id="logo-file" accept="image/png">
+        <label class="btn" for="logo-file" id="logo-choose" tabindex="0" data-t="logoUpload">Upload a logo</label>
+      </div>
+      <p class="note" id="logo-msg" aria-live="polite"></p>
+    </div>
     <input type="search" id="picker-search" autocomplete="off" spellcheck="false" placeholder="Search icons" aria-label="Search icons">
     <div id="picker-body"></div>
     <p class="note" id="picker-none" hidden></p>
@@ -567,6 +579,15 @@ footer a { color: var(--muted); }
       portLede: 'The Home and this page use it. Change it if another program on the TV needs this one.',
       portTaken: ' is in use by another program on the TV, so this page is on ', portBad: 'A port is a number from 1024 to 65535.',
       portMoving: 'Moving to the new address…',
+      logoRules: 'Your own logo: a PNG with a transparent background and the logo in white, at least 240 pixels on its longer side. Lightkeeper trims the empty edges and keeps it at most 240 pixels tall and 2000 wide.',
+      logoUpload: 'Upload a logo', logoMine: 'yours', logoChecking: 'Checking the logo…',
+      logoNotPng: 'Not a PNG file. Export the logo as PNG.', logoTooBig: 'Too large: at most 10 MB and 5000 × 5000 pixels.',
+      logoOpaque: 'The background is not transparent: no pixel can be seen through. Export the logo on a transparent background.',
+      logoEmpty: 'Nothing shows: the picture is all transparent.',
+      logoNotWhite: 'The logo is not white: ', logoNotWhiteEnd: '% of what shows has colour or grey. Make it all white (#FFFFFF) on the transparent background.',
+      logoSmall: 'Too small: ', logoSmallEnd: ' pixels once the empty edges are trimmed. It needs at least 240 on its longer side.',
+      logoMax: 'There are 50 logos of yours already. Remove one first.', logoRemove: 'Remove this logo',
+      logoRemoveAsk: 'Remove this logo? The tiles that show it go back to their own.',
       iconFor: 'Icon for ', iconAuto: 'Automatic', iconAutoLede: 'as Lightkeeper picks it', iconGeneric: 'Generic', iconServices: 'Services',
       iconSearch: 'Search icons', iconNone: 'No icon by that name.', close: 'Close', iconChange: 'Change the icon of ',
       gen_browser: 'Browser', gen_gallery: 'Gallery', gen_apps: 'Apps', gen_media: 'Media', gen_home: 'Home', gen_sport: 'Sport',
@@ -615,6 +636,7 @@ footer a { color: var(--muted); }
     x.onload = function () {
       var r = null;
       try { r = JSON.parse(x.responseText); } catch (e) {}
+      if (r && r.config) MIEI = r.config.myLogos || {};
       if (x.status === 401) return showLock(r && r.error === 'locked' ? t.locked : (pin ? t.wrong : ''));
       cb(x.status >= 200 && x.status < 300 && r ? r : null, r, x.status);
     };
@@ -904,7 +926,10 @@ footer a { color: var(--muted); }
     top.className = 'grid';
     top.style.marginTop = '16px';
     top.appendChild(pickButton('', t.iconAutoLede, !chosen));
+    Object.keys(MIEI).forEach(function (n) { top.appendChild(mioLogo(n, n === chosen)); });
     body.appendChild(top);
+    $('logo-msg').textContent = '';
+    $('logo-msg').className = 'note';
     [[t.iconGeneric, c.generic, genericName], [t.iconServices, c.services, serviceName]].forEach(function (sec) {
       var h = document.createElement('h3');
       h.textContent = sec[0];
@@ -925,6 +950,106 @@ footer a { color: var(--muted); }
     on.focus();
     if (on.scrollIntoView) on.scrollIntoView(false);
   }
+  // A logo of yours in the catalogue, with the cross that takes it away.
+  function mioLogo(n, on) {
+    var w = document.createElement('span'), del = document.createElement('button');
+    w.className = 'mio';
+    w.appendChild(pickButton(n, t.logoMine, on));
+    del.type = 'button';
+    del.className = 'del';
+    del.innerHTML = '&times;';
+    del.setAttribute('aria-label', t.logoRemove);
+    del.onclick = function () {
+      if (!window.confirm(t.logoRemoveAsk)) return;
+      status(t.saving);
+      api('DELETE', '/api/logo?id=' + n, null, function (r) {
+        if (!r) return status(t.notSaved + t.offline, true);
+        cfg = r.config;
+        status(t.saved);
+        renderTiles();
+        preview();
+        openPicker(pickerFor, pickerFrom);
+      });
+    };
+    w.appendChild(del);
+    return w;
+  }
+
+  /*
+   * A logo of yours, as the page and the README ask for it: a PNG, white on transparency,
+   * at least 240 pixels on its longer side. cb(what is wrong), or cb(null, png) trimmed to
+   * the logo and at most 2000 × 240, as the server takes it.
+   */
+  function preparaLogo(file, cb) {
+    if (file.size > 10 * 1024 * 1024) return cb(t.logoTooBig);
+    var fr = new FileReader();
+    fr.onload = function () {
+      var b = new Uint8Array(fr.result), sig = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+      for (var i = 0; i < 8; i++) if (b[i] !== sig[i]) return cb(t.logoNotPng);
+      var URLs = window.URL || window.webkitURL, url = URLs.createObjectURL(file), img = new Image();
+      img.onload = function () {
+        URLs.revokeObjectURL(url);
+        var w = img.naturalWidth, h = img.naturalHeight;
+        if (w * h > 25000000) return cb(t.logoTooBig);
+        var c = document.createElement('canvas');
+        c.width = w;
+        c.height = h;
+        var g = c.getContext('2d');
+        g.drawImage(img, 0, 0);
+        var px = g.getImageData(0, 0, w, h).data, clear = 0, shown = 0, grey = 0, x0 = w, y0 = h, x1 = -1, y1 = -1;
+        for (var j = 0; j < px.length; j += 4) {
+          var a = px[j + 3];
+          if (a < 16) { clear++; continue; }
+          if (a > 24) {
+            var x = (j / 4) % w, y = Math.floor(j / 4 / w);
+            if (x < x0) x0 = x;
+            if (x > x1) x1 = x;
+            if (y < y0) y0 = y;
+            if (y > y1) y1 = y;
+          }
+          // White, but for the soft pixels at the edges.
+          if (a >= 128) { shown++; if (Math.min(px[j], px[j + 1], px[j + 2]) < 225) grey++; }
+        }
+        if (!clear) return cb(t.logoOpaque);
+        if (x1 < 0) return cb(t.logoEmpty);
+        if (grey > shown * 0.02) return cb(t.logoNotWhite + Math.max(3, Math.round(grey * 100 / shown)) + t.logoNotWhiteEnd);
+        var bw = x1 - x0 + 1, bh = y1 - y0 + 1;
+        if (Math.max(bw, bh) < 240) return cb(t.logoSmall + bw + ' × ' + bh + t.logoSmallEnd);
+        var k = Math.min(1, 240 / bh, 2000 / bw), out = document.createElement('canvas');
+        out.width = Math.max(1, Math.round(bw * k));
+        out.height = Math.max(1, Math.round(bh * k));
+        var o = out.getContext('2d');
+        o.imageSmoothingEnabled = true;
+        o.imageSmoothingQuality = 'high';
+        o.drawImage(c, x0, y0, bw, bh, 0, 0, out.width, out.height);
+        toBlob(out, function (png) { cb(null, png); }, 'image/png');
+      };
+      img.onerror = function () { URLs.revokeObjectURL(url); cb(t.notImage); };
+      img.src = url;
+    };
+    fr.onerror = function () { cb(t.notImage); };
+    fr.readAsArrayBuffer(file.slice(0, 8));
+  }
+
+  $('logo-choose').onkeydown = function (e) { if (e.keyCode === 13 || e.keyCode === 32) { e.preventDefault(); $('logo-file').click(); } };
+  $('logo-file').onchange = function () {
+    var f = this.files && this.files[0], msg = $('logo-msg');
+    this.value = '';
+    if (!f || !pickerFor) return;
+    var say = function (text, err) { msg.textContent = text; msg.className = 'note' + (err ? ' err' : ''); };
+    say(t.logoChecking);
+    preparaLogo(f, function (err, png) {
+      if (err || !png) return say(err || t.notImage, true);
+      api('POST', '/api/logo', png, function (r, raw) {
+        if (raw && raw.error === 'space') return say(t.noSpace + mb(raw.keepFree) + t.noSpaceEnd, true);
+        if (raw && raw.error === 'logos') return say(t.logoMax, true);
+        if (!r) return say(t.notSaved + ((raw && raw.error) || t.offline), true);
+        cfg = r.config;
+        say('');
+        choose(r.id);
+      }, 'image/png');
+    });
+  };
   function closePicker() {
     $('picker').hidden = true;
     if (pickerFrom && document.body.contains(pickerFrom)) pickerFrom.focus();
@@ -964,7 +1089,7 @@ footer a { color: var(--muted); }
   // A remote's arrows move between the tiles, the nearest one that way; OK picks; Back closes.
   function nearest(from, dx, dy) {
     var a = from.getBoundingClientRect(), ax = a.left + a.width / 2, ay = a.top + a.height / 2;
-    var all = $('picker').querySelectorAll('.pick, #picker-search'), best = null, bestD = Infinity;
+    var all = $('picker').querySelectorAll('.pick, .mio .del, #logo-choose, #picker-search'), best = null, bestD = Infinity;
     for (var i = 0; i < all.length; i++) {
       var el = all[i];
       if (el === from || el.hidden || !el.offsetParent) continue;
@@ -1288,11 +1413,12 @@ footer a { color: var(--muted); }
     });
   }
 
-  function toBlob(canvas, cb) {
-    if (canvas.toBlob) return canvas.toBlob(cb, 'image/jpeg', 0.88);
-    var d = atob(canvas.toDataURL('image/jpeg', 0.88).split(',')[1]), a = new Uint8Array(d.length);
+  function toBlob(canvas, cb, type) {
+    type = type || 'image/jpeg';
+    if (canvas.toBlob) return canvas.toBlob(cb, type, 0.88);
+    var d = atob(canvas.toDataURL(type, 0.88).split(',')[1]), a = new Uint8Array(d.length);
     for (var i = 0; i < d.length; i++) a[i] = d.charCodeAt(i);
-    cb(new Blob([a], { type: 'image/jpeg' }));
+    cb(new Blob([a], { type: type }));
   }
 
   // Cropped to 16:9 around the middle and drawn at the size chosen: the TV gets a JPEG it can show as it is.
@@ -1673,6 +1799,7 @@ footer a { color: var(--muted); }
   api('GET', '/api/config', null, function (r) {
     if (!r) { $('page').hidden = false; status(t.offline, true); return; }
     cfg = r;
+    MIEI = r.myLogos || {};
     translate();
     if (cfg.pinSet && !pin) return showLock('');
     loadTv();

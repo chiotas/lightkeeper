@@ -56,6 +56,10 @@ assert.equal(s.DEFAULTS.clockSide, 'left');
 assert.deepEqual(s.validate({ clockSide: 'right' }, keys), { clockSide: 'right' });
 assert.deepEqual(s.validate({ clockSide: 'left' }, keys), { clockSide: 'left' });
 ['centre', 'Right', '', null, 1].forEach(function (v) { assert.equal(s.validate({ clockSide: v }, keys), 'clockSide', JSON.stringify(v)); });
+// A PNG's size from its header; null for anything else.
+assert.deepEqual(s.pngSize(fs.readFileSync(path.join(__dirname, '..', 'app', 'logos', 'skyq.png'))), { width: 647, height: 236 });
+assert.equal(s.pngSize(fs.readFileSync(path.join(__dirname, '..', 'app', 'backgrounds', 'godrevy.jpg'))), null);
+assert.equal(s.pngSize(null), null);
 // Where each digit's ink ends, for every style the clock has, with the "M" of AM/PM.
 var logosDx = (function () { var ctx = {}; require('vm').runInNewContext(fs.readFileSync(path.join(__dirname, '..', 'app', 'logos.js'), 'utf8'), ctx); return ctx.RIENTRO_DX; })();
 ['thin', 'bold', 'classic', 'mono', 'rounded', 'digital'].forEach(function (st) {
@@ -324,6 +328,12 @@ assert.equal(logos.logoDi({ id: 'some.app', title: 'Some App' }, 'logo'), ''); /
 // Sky Q (#9): by an app's title, and picked for an HDMI input.
 assert.equal(logos.logoDi({ id: 'some.app', title: 'Sky Q' }, 'logo'), 'skyq');
 assert.equal(logos.logoDi({ id: 'com.webos.app.hdmi2', title: 'HDMI 2', logo: 'skyq' }, 'icon'), 'skyq');
+// A logo uploaded: shown once the page knows it (cfg.myLogos), with names and logos alike but not names only.
+assert.equal(logos.logoDi({ id: 'netflix', title: 'Netflix', logo: 'up-0123abcd' }, 'logo'), 'netflix');
+logos.MIEI = { 'up-0123abcd': [480, 240] };
+assert.equal(logos.logoDi({ id: 'netflix', title: 'Netflix', logo: 'up-0123abcd' }, 'logo'), 'up-0123abcd');
+assert.equal(logos.logoDi({ id: 'netflix', title: 'Netflix', logo: 'up-0123abcd' }, 'text'), '');
+logos.MIEI = {};
 assert.equal(logos.logoDi({ id: 'com.webos.app.browser', title: 'Browser Web' }, 'logo'), 'browser');
 assert.equal(logos.logoDi({ id: 'com.webos.app.livetv', title: 'Canali TV' }, 'text'), 'tv');
 assert.equal(logos.logoDi({ id: 'com.webos.app.hdmi3', title: 'PlayStation 5' }, 'icon'), 'playstation5');
@@ -440,6 +450,10 @@ assert.ok(!s.hostOk({ headers: { host: 'evil.example:8090' } }) && !s.hostOk({ h
 var jpeg = fs.readFileSync(path.join(__dirname, '..', 'app', 'backgrounds', 'godrevy.jpg'));
 var thumbJpeg = fs.readFileSync(path.join(__dirname, '..', 'app', 'backgrounds', 'thumbs', 'night.jpg'));
 var mineA, mine3 = []; // ids of pictures uploaded in the checks
+// A logo of yours: Sky Q's white picture is a PNG with transparency, 647 × 236.
+var logoPng = fs.readFileSync(path.join(__dirname, '..', 'app', 'logos', 'skyq.png')), logoA;
+function pngWith(at, value) { var b = Buffer.from ? Buffer.from(logoPng) : new Buffer(logoPng); b.writeUInt32BE(value, at); return b; }
+function png(b) { return { headers: { 'Content-Type': 'image/png' }, body: b }; }
 function upload(file, cb) {
   req('POST', '/api/background', { headers: { 'Content-Type': 'image/jpeg' }, body: fs.readFileSync(path.join(__dirname, '..', 'app', 'backgrounds', file)) }, cb);
 }
@@ -637,6 +651,42 @@ function httpChecks() {
       });
     }); },
     // Open apps: off by default, and then the TV is not even asked.
+    // Logos of yours: only a PNG with transparency up to 2000 × 240, under a name the server picks.
+    function (next) { req('POST', '/api/logo', png(jpeg), function (st) { assert.equal(st, 400); next(); }); },
+    function (next) { req('POST', '/api/logo', { headers: { 'Content-Type': 'application/json' }, body: logoPng }, function (st) { assert.equal(st, 415); next(); }); },
+    function (next) { req('POST', '/api/logo', png(logoPng.slice(0, logoPng.length - 12)), function (st) { assert.equal(st, 400); next(); }); }, // no IEND
+    function (next) { req('POST', '/api/logo', png(pngWith(20, 241)), function (st) { assert.equal(st, 400); next(); }); }, // 241 tall
+    function (next) { req('POST', '/api/logo', png(pngWith(16, 2001)), function (st) { assert.equal(st, 400); next(); }); }, // 2001 wide
+    function (next) { var b = pngWith(16, 647); b[25] = 2; req('POST', '/api/logo', png(b), function (st) { assert.equal(st, 400); next(); }); }, // no alpha
+    function (next) { var big = Buffer.concat([logoPng, Buffer.alloc ? Buffer.alloc(1024 * 1024) : new Buffer(1024 * 1024)]);
+      req('POST', '/api/logo', png(big), function (st) { assert.equal(st, 413); next(); }); },
+    function (next) { req('POST', '/api/config', json({ myLogos: { 'up-00000000': [10, 10] } }), function (st, j) { assert.equal(st, 400); assert.equal(j.error, 'invalid: myLogos'); next(); }); },
+    function (next) { req('POST', '/api/logo', png(logoPng), function (st, j) {
+      assert.equal(st, 200); assert.ok(/^up-[0-9a-f]{8}$/.test(j.id), j.id);
+      assert.deepEqual(j.config.myLogos, (function () { var o = {}; o[j.id] = [647, 236]; return o; })());
+      logoA = j.id;
+      assert.deepEqual(fs.readdirSync(path.join(env.LIGHTKEEPER_DATA, 'logos')), [logoA + '.png']);
+      req('GET', '/mylogos/' + logoA + '.png', {}, function (st2, j2, h2, raw2) {
+        assert.equal(st2, 200); assert.equal(h2['content-type'], 'image/png'); assert.equal(raw2.length, logoPng.length);
+        req('GET', '/mylogos/..%2Fconfig.json', {}, function (st3) { assert.equal(st3, 404); next(); });
+      }); }); },
+    // Chosen for a tile, an input too; an id it does not have is refused.
+    function (next) { req('GET', '/api/config', {}, function (st, j) {
+      var tiles = j.tiles.slice(0, 2).concat([{ id: 'com.webos.app.hdmi1', title: 'HDMI 1' }]);
+      tiles[0].logo = logoA; tiles[2].logo = logoA;
+      req('POST', '/api/config', json({ tiles: [{ id: 'netflix', title: 'Netflix', logo: 'up-00000000' }] }), function (st2) {
+        assert.equal(st2, 400);
+        req('POST', '/api/config', json({ tiles: tiles }), function (st3, j3) {
+          assert.equal(st3, 200); assert.equal(j3.config.tiles[0].logo, logoA); assert.equal(j3.config.tiles[2].logo, logoA); next();
+        });
+      }); }); },
+    // Taken away: the tiles go back to their own logo, and the file is gone.
+    function (next) { req('DELETE', '/api/logo?id=bad', {}, function (st) { assert.equal(st, 400); next(); }); },
+    function (next) { req('DELETE', '/api/logo?id=' + logoA, {}, function (st, j) {
+      assert.equal(st, 200); assert.deepEqual(j.config.myLogos, {});
+      assert.ok(j.config.tiles.every(function (t) { return t.logo === undefined; }));
+      assert.deepEqual(fs.readdirSync(path.join(env.LIGHTKEEPER_DATA, 'logos')), []);
+      req('GET', '/mylogos/' + logoA + '.png', {}, function (st2) { assert.equal(st2, 404); next(); }); }); },
     function (next) {
       fs.writeFileSync(RUNNING, 'netflix\n');
       req('GET', '/api/open', { headers: { Origin: 'null' } }, function (st, j) {

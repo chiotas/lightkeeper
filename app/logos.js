@@ -108,6 +108,8 @@ var IMMAGINI_NOMI = {"3sat": "3sat", "abc": "ABC", "amazonalexa": "Alexa", "amaz
   "zee5": "ZEE5"};
 // Where those pictures are, from the page that shows them.
 var LOGHI_BASE = 'logos/';
+// The logos uploaded in the settings, by id (cfg.myLogos): their width and height; and where they are.
+var MIEI = {}, MIEI_BASE = '/mylogos/';
 
 // Icons for what has no logo: LG's own apps, a game console, plain HDMI, from
 // Phosphor Icons (fill, MIT) and, for HDMI, Google's Material Symbols (Apache 2.0);
@@ -286,7 +288,7 @@ function apertura(tile, browser) {
  */
 function logoDi(tile, modo, titoloTv) {
   // One chosen in the settings, with logos or app icons.
-  if (tile.logo && modo !== 'text' && (SIMPLE_ICONS[tile.logo] || IMMAGINI[tile.logo] || ICONE[tile.logo])) return tile.logo;
+  if (tile.logo && modo !== 'text' && (SIMPLE_ICONS[tile.logo] || IMMAGINI[tile.logo] || ICONE[tile.logo] || MIEI[tile.logo])) return tile.logo;
   // A web page: the browser's plain icon with logos; no favicon is fetched.
   if (tile.url) return modo === 'logo' ? 'browser' : '';
   if (eIngresso(tile.id)) {
@@ -316,10 +318,10 @@ function scala(w, h, alto, maxW, maxH) {
  */
 var misure = {};
 function disegnaLogo(nome, alto, maxW, maxH, dove) {
-  var dim = IMMAGINI[nome];
+  var dim = IMMAGINI[nome] || MIEI[nome];
   if (dim) {
     var img = document.createElement('img'), k = scala(dim[0], dim[1], alto, maxW, maxH);
-    img.src = LOGHI_BASE + nome + '.png';
+    img.src = (IMMAGINI[nome] ? LOGHI_BASE : MIEI_BASE) + nome + '.png';
     img.alt = '';
     img.width = Math.round(dim[0] * k);
     img.height = Math.round(dim[1] * k);

@@ -325,6 +325,8 @@ function sfondo(url) {
 }
 
 function disegna() {
+  MIEI = cfg.myLogos || {};
+  MIEI_BASE = server() + '/mylogos/';
   ora.className = classeOra(cfg);
   document.getElementById('testa').className = veil.className = cfg.clockSide === 'right' ? 'dx' : '';
   // Names only; logos, or the TV's icon where an app has none; the TV's icons. Inputs show their device.

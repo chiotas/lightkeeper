@@ -54,6 +54,12 @@ var MINE_ID = /^my-[0-9a-f]{8}$/;
 var MIN_FREE = 64 * 1024 * 1024;
 var DF = process.env.LIGHTKEEPER_DF || 'df';
 var MAX_THUMB = 512 * 1024;
+// The logos uploaded for tiles, as <id>.png: white on transparency, at most 2000 × 240,
+// trimmed and sized by the settings page. Kept beside the config, so a new install keeps them.
+var MY_LOGOS = path.join(DATA, 'logos');
+var LOGO_ID = /^up-[0-9a-f]{8}$/;
+var MAX_LOGO = 1024 * 1024;
+var MAX_LOGOS = 50;
 // A new mark each time the TV comes on, written by the boot hook; the background picked for it.
 var SESSION_FILE = process.env.LIGHTKEEPER_SESSION || '/tmp/lightkeeper.session';
 var BG_SESSION = path.join(DATA, 'background-session.json');
@@ -119,6 +125,8 @@ var DEFAULTS = {
   preset: 'godrevy',
   background: { custom: false, rev: 0 },
   mine: [],
+  // The logos uploaded, by id: [width, height].
+  myLogos: {},
   randomBackground: false,
   backgroundPool: null,
   veil: 80,
@@ -283,6 +291,23 @@ function mineSizes() {
   });
 }
 
+/* ---------- the logos uploaded ---------- */
+
+function logoPath(id) { return path.join(MY_LOGOS, id + '.png'); }
+
+// Those in the config that are there.
+function myLogos() {
+  var all = (config && config.myLogos) || {}, out = {};
+  Object.keys(all).forEach(function (id) { if (LOGO_ID.test(id) && fs.existsSync(logoPath(id))) out[id] = all[id]; });
+  return out;
+}
+
+function newLogoId() {
+  var id;
+  do { id = 'up-' + crypto.randomBytes(4).toString('hex'); } while (fs.existsSync(logoPath(id)));
+  return id;
+}
+
 function pickBackground(pool, last, rnd) {
   if (pool.length < 2) return null;
   var others = pool.filter(function (b) { return b !== last; });
@@ -423,7 +448,7 @@ function validate(body, keyNames) {
         }
         // A logo or icon chosen for the tile; without one, Lightkeeper picks it.
         if (t.logo !== undefined) {
-          if (typeof t.logo !== 'string' || !has(CATALOG, t.logo)) return 'tiles';
+          if (typeof t.logo !== 'string' || !(has(CATALOG, t.logo) || has(myLogos(), t.logo))) return 'tiles';
           tile.logo = t.logo;
         }
         tiles.push(tile);
@@ -939,6 +964,21 @@ function jpegSize(b) {
   return null;
 }
 
+/*
+ * The size of a PNG with an alpha channel, grey or colour, from its header, or null
+ * if it is not one: the signature, IHDR first, IEND last.
+ * ponytail: the pixels are not decoded; the browser that shows it refuses a broken one.
+ */
+var PNG_SIG = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+function pngSize(b) {
+  if (!b || b.length < 8 + 25 + 12) return null;
+  for (var i = 0; i < 8; i++) if (b[i] !== PNG_SIG[i]) return null;
+  if (b.readUInt32BE(8) !== 13 || b.toString('ascii', 12, 16) !== 'IHDR') return null;
+  if (b.toString('ascii', b.length - 8, b.length - 4) !== 'IEND') return null;
+  if (b[25] !== 4 && b[25] !== 6) return null;
+  return { width: b.readUInt32BE(16), height: b.readUInt32BE(20) };
+}
+
 var keyStatus = 'off';
 
 function handle(req, res) {
@@ -972,6 +1012,9 @@ function handle(req, res) {
     // Not kept by the browser when the small copy is still on its way.
     return sendFile(res, minePath(mp[1], thumb), mp[2] && !thumb ? 'no-store' : 'max-age=31536000');
   }
+  // A logo uploaded, never changed under its id.
+  var lp = /^\/mylogos\/(up-[0-9a-f]{8})\.png$/.exec(p);
+  if (m === 'GET' && lp) return sendFile(res, logoPath(lp[1]), 'max-age=31536000', { 'Content-Security-Policy': "default-src 'none'" });
   if (m === 'GET' && p === '/icon') {
     var id = decodeURIComponent((/(?:^|&)id=([^&]*)/.exec(query) || [])[1] || '');
     if (!ID_RE.test(id)) return send(res, 400, { ok: false, error: 'bad id' });
@@ -1122,6 +1165,41 @@ function handle(req, res) {
     saveConfig();
     return send(res, 200, { ok: true, config: publicConfig() });
   }
+  // A logo of yours for tiles, chosen by the page for one; refused when it would leave less than MIN_FREE free.
+  if (m === 'POST' && p === '/api/logo') {
+    if (!postOk(req, 'image/png')) return send(res, 415, { ok: false, error: 'a PNG is expected' });
+    return readBody(req, MAX_LOGO, function (b) {
+      if (!b) return send(res, 413, { ok: false, error: 'too large' });
+      var size = pngSize(b);
+      if (!size || !size.width || !size.height || size.width > 2000 || size.height > 240) {
+        return send(res, 400, { ok: false, error: 'a PNG with transparency up to 2000 × 240 is expected' });
+      }
+      if (Object.keys(myLogos()).length >= MAX_LOGOS) return send(res, 409, { ok: false, error: 'logos', max: MAX_LOGOS });
+      freeSpace(function (free) {
+        if (free === null || free - b.length < MIN_FREE) return send(res, 507, { ok: false, error: 'space', free: free, keepFree: MIN_FREE });
+        var id = newLogoId();
+        try {
+          if (!fs.existsSync(DATA)) fs.mkdirSync(DATA, 448);
+          if (!fs.existsSync(MY_LOGOS)) fs.mkdirSync(MY_LOGOS, 448);
+          writeAtomic(logoPath(id), b, 420);
+          config.myLogos = myLogos();
+          config.myLogos[id] = [size.width, size.height];
+          saveConfig();
+        } catch (e) { return send(res, 500, { ok: false, error: e.message }); }
+        send(res, 200, { ok: true, id: id, config: publicConfig() });
+      });
+    });
+  }
+  // A logo taken away: the tiles that showed it go back to their own.
+  var lid = (/(?:^|&)id=(up-[0-9a-f]{8})(?:&|$)/.exec(query) || [])[1];
+  if (m === 'DELETE' && p === '/api/logo') {
+    if (!lid) return send(res, 400, { ok: false, error: 'bad id' });
+    try { fs.unlinkSync(logoPath(lid)); } catch (e) {}
+    config.myLogos = myLogos();
+    (config.tiles || []).forEach(function (t) { if (t.logo === lid) delete t.logo; });
+    saveConfig();
+    return send(res, 200, { ok: true, config: publicConfig() });
+  }
   if (m === 'POST' && p === '/api/screensaver') {
     return readJson(req, res, function (body) {
       if (typeof body.pause !== 'boolean') return send(res, 400, { ok: false, error: 'pause expected' });
@@ -1260,7 +1338,7 @@ function start() {
   process.on('exit', function () { if (saverChild) saverChild.kill(); });
 }
 
-module.exports = { DEVICES: DEVICES, DEFAULTS: DEFAULTS, CATALOG: CATALOG, webUrl: webUrl, newer: newer, readManifest: readManifest, verifyIpk: verifyIpk, validate: validate, jpegSize: jpegSize, isLocal: isLocal, hostOk: hostOk,
+module.exports = { DEVICES: DEVICES, DEFAULTS: DEFAULTS, CATALOG: CATALOG, webUrl: webUrl, newer: newer, readManifest: readManifest, verifyIpk: verifyIpk, validate: validate, jpegSize: jpegSize, pngSize: pngSize, isLocal: isLocal, hostOk: hostOk,
   applyKey: applyKey, iconFile: iconFile, pickBackground: pickBackground, appChoices: appChoices, openApps: openApps, fromHome: fromHome, keysOnTv: keysOnTv,
   pinHash: pinHash, same: same };
 
