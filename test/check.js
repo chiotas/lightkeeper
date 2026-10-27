@@ -328,6 +328,10 @@ assert.equal(logos.logoDi({ id: 'some.app', title: 'Some App' }, 'logo'), ''); /
 // Sky Q (#9): by an app's title, and picked for an HDMI input.
 assert.equal(logos.logoDi({ id: 'some.app', title: 'Sky Q' }, 'logo'), 'skyq');
 assert.equal(logos.logoDi({ id: 'com.webos.app.hdmi2', title: 'HDMI 2', logo: 'skyq' }, 'icon'), 'skyq');
+// Sky Stream (#10), the same way.
+assert.equal(logos.logoDi({ id: 'some.app', title: 'Sky Stream' }, 'logo'), 'skystream');
+assert.equal(logos.logoDi({ id: 'com.webos.app.hdmi3', title: 'HDMI 3', logo: 'skystream' }, 'logo'), 'skystream');
+assert.equal(logos.IMMAGINI_NOMI.skystream, 'Sky Stream');
 // A logo uploaded: shown once the page knows it (cfg.myLogos), with names and logos alike but not names only.
 assert.equal(logos.logoDi({ id: 'netflix', title: 'Netflix', logo: 'up-0123abcd' }, 'logo'), 'netflix');
 logos.MIEI = { 'up-0123abcd': [480, 240] };
