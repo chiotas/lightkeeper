@@ -71,6 +71,10 @@ button, input, select { font: inherit; color: inherit; }
     radial-gradient(1100px 620px at 100% 0, rgba(18,13,8,.92) 0, rgba(18,13,8,0) 100%),
     linear-gradient(to top, rgba(18,13,8,1) 0, rgba(18,13,8,.7) 20%, rgba(18,13,8,0) 50%);
 }
+.screen .veil.due { background: radial-gradient(1100px 620px at 0 0, rgba(18,13,8,.92) 0, rgba(18,13,8,0) 100%), linear-gradient(to top, rgba(18,13,8,1) 0, rgba(18,13,8,.74) 36%, rgba(18,13,8,0) 68%); }
+.screen .veil.due.dx { background: radial-gradient(1100px 620px at 100% 0, rgba(18,13,8,.92) 0, rgba(18,13,8,0) 100%), linear-gradient(to top, rgba(18,13,8,1) 0, rgba(18,13,8,.74) 36%, rgba(18,13,8,0) 68%); }
+.screen .veil.due.nomi { background: radial-gradient(1100px 620px at 0 0, rgba(18,13,8,.92) 0, rgba(18,13,8,0) 100%), linear-gradient(to top, rgba(18,13,8,1) 0, rgba(18,13,8,.7) 26%, rgba(18,13,8,0) 56%); }
+.screen .veil.due.nomi.dx { background: radial-gradient(1100px 620px at 100% 0, rgba(18,13,8,.92) 0, rgba(18,13,8,0) 100%), linear-gradient(to top, rgba(18,13,8,1) 0, rgba(18,13,8,.7) 26%, rgba(18,13,8,0) 56%); }
 .screen header, .screen nav { position: absolute; left: 112px; }
 .screen header { top: 68px; }
 .screen header.dx { left: auto; right: 112px; text-align: right; }
@@ -210,6 +214,11 @@ input[type=range]::-moz-range-thumb { width: 24px; height: 24px; border: 0; bord
 .icon-btn svg { display: block; width: 20px; height: 20px; margin: 0 auto; }
 .icon-btn:hover { background: var(--wash); }
 .icon-btn[disabled] { opacity: .25; cursor: default; background: transparent; }
+/* The break between the two rows, among the tiles: no name to edit, and no Remove. */
+.tiles li.break .ic { color: var(--muted); }
+.tiles li.break .title { display: block; line-height: 26px; }
+.tiles li.break .name .sub { white-space: normal; }
+.tiles li.break .vuoto { display: block; width: 44px; margin-left: 4px; -webkit-flex-shrink: 0; flex-shrink: 0; }
 .empty { padding: 22px 0; color: var(--muted); border-bottom: 1px solid var(--line); }
 .add { display: flex; margin-top: 18px; }
 .add select { -webkit-flex: 1; flex: 1; }
@@ -317,7 +326,7 @@ footer a { color: var(--muted); }
         <div class="screen" id="screen">
           <div class="veil" id="p-veil"></div>
           <header><div class="ora" id="p-ora"></div><div class="meteo" id="p-meteo"></div></header>
-          <nav id="p-nav"></nav>
+          <nav id="p-nav"></nav><nav id="p-nav2"></nav>
         </div>
       </div>
       <p class="caption"><span data-t="caption">As it looks on the TV</span><span id="status" role="status" aria-live="polite"></span></p>
@@ -352,6 +361,10 @@ footer a { color: var(--muted); }
             <label><input type="radio" name="labels" value="selected"><span data-t="labelsSel">Selected</span></label>
             <label><input type="radio" name="labels" value="none"><span data-t="labelsNone">None</span></label>
           </div>
+        </div>
+        <div class="row">
+          <label for="two-rows"><span data-t="twoRows">Two rows</span><span class="sub" data-t="twoRowsLede">Move New row in the list above to choose where the lower row starts. Down on the upper row goes to the lower one; on the lower row it opens LG's Home, as before.</span></label>
+          <input type="checkbox" class="switch" id="two-rows" role="switch">
         </div>
         <div class="row">
           <label for="open-apps"><span data-t="openApps">Open apps button</span><span class="sub" data-t="openAppsLede">At the end of the row: it lists the apps open on the TV and closes them.</span></label>
@@ -546,7 +559,9 @@ footer a { color: var(--muted); }
       webBadUrl: 'An address starts with http:// or https://, then the site, without spaces.', onWeb: 'Opens ',
       add: 'Add a tile…', apps: 'Apps', inputs: 'Inputs', up: 'Move up', down: 'Move down', drop: 'Remove',
       nameOnTv: 'Name on the TV', onTv: 'On the TV: ', empty: 'No tiles yet. Add the apps and inputs you use most.',
-      full: 'Fifty tiles at most.', drag: 'Drag to move', labels: 'Names under them', labelsAll: 'All', labelsSel: 'Selected', labelsNone: 'None', show: 'Show', names: 'Names', logos: 'Logos', icons: 'App icons', background: 'Background',
+      full: 'Fifty tiles at most.', drag: 'Drag to move', labels: 'Names under them', labelsAll: 'All', labelsSel: 'Selected', labelsNone: 'None',
+      twoRows: 'Two rows', twoRowsLede: 'Move New row in the list above to choose where the lower row starts. Down on the upper row goes to the lower one; on the lower row it opens LG\'s Home, as before.',
+      newRow: 'New row', newRowSub: 'The tiles after it make the lower row', show: 'Show', names: 'Names', logos: 'Logos', icons: 'App icons', background: 'Background',
       device: 'Device', dev_console: 'Game console', dev_hdmi: 'HDMI', dev_player: 'Media player', dev_tv: 'TV', devAuto: 'Automatic: ',
       showLede: 'Logos are drawn in white; an app without one shows its own icon from the TV. Inputs show the device you pick.',
       randomBg: 'Random each time the TV turns on', randomBgLede: 'One of the pictures ticked above, never the same twice in a row.',
@@ -608,7 +623,8 @@ footer a { color: var(--muted); }
   var ICON = {
     up: '<path d="M5 12.5l5-5 5 5"/>',
     down: '<path d="M5 7.5l5 5 5-5"/>',
-    drop: '<path d="M5.5 5.5l9 9M14.5 5.5l-9 9"/>'
+    drop: '<path d="M5.5 5.5l9 9M14.5 5.5l-9 9"/>',
+    rows: '<path d="M3.5 7h13M3.5 13h13"/>'
   };
   // The settings gear: Phosphor Icons' gear, light weight (MIT, licence in logos/).
   var GEAR = '<svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M128,82a46,46,0,1,0,46,46A46.06,46.06,0,0,0,128,82Zm0,80a34,34,0,1,1,34-34A34,34,0,0,1,128,162ZM214,130.84c.06-1.89.06-3.79,0-5.68L229.33,106a6,6,0,0,0,1.11-5.29A105.34,105.34,0,0,0,219.76,74.9a6,6,0,0,0-4.53-3l-24.45-2.71q-1.93-2.07-4-4l-2.72-24.46a6,6,0,0,0-3-4.53,105.65,105.65,0,0,0-25.77-10.66A6,6,0,0,0,150,26.68l-19.2,15.37c-1.89-.06-3.79-.06-5.68,0L106,26.67a6,6,0,0,0-5.29-1.11A105.34,105.34,0,0,0,74.9,36.24a6,6,0,0,0-3,4.53L69.23,65.22q-2.07,1.94-4,4L40.76,72a6,6,0,0,0-4.53,3,105.65,105.65,0,0,0-10.66,25.77A6,6,0,0,0,26.68,106l15.37,19.2c-.06,1.89-.06,3.79,0,5.68L26.67,150.05a6,6,0,0,0-1.11,5.29A105.34,105.34,0,0,0,36.24,181.1a6,6,0,0,0,4.53,3l24.45,2.71q1.94,2.07,4,4L72,215.24a6,6,0,0,0,3,4.53,105.65,105.65,0,0,0,25.77,10.66,6,6,0,0,0,5.29-1.11L125.16,214c1.89.06,3.79.06,5.68,0l19.21,15.38a6,6,0,0,0,3.75,1.31,6.2,6.2,0,0,0,1.54-.2,105.34,105.34,0,0,0,25.76-10.68,6,6,0,0,0,3-4.53l2.71-24.45q2.07-1.93,4-4l24.46-2.72a6,6,0,0,0,4.53-3,105.49,105.49,0,0,0,10.66-25.77,6,6,0,0,0-1.11-5.29Zm-3.1,41.63-23.64,2.63a6,6,0,0,0-3.82,2,75.14,75.14,0,0,1-6.31,6.31,6,6,0,0,0-2,3.82l-2.63,23.63A94.28,94.28,0,0,1,155.14,218l-18.57-14.86a6,6,0,0,0-3.75-1.31h-.36a78.07,78.07,0,0,1-8.92,0,6,6,0,0,0-4.11,1.3L100.87,218a94.13,94.13,0,0,1-17.34-7.17L80.9,187.21a6,6,0,0,0-2-3.82,75.14,75.14,0,0,1-6.31-6.31,6,6,0,0,0-3.82-2l-23.63-2.63A94.28,94.28,0,0,1,38,155.14l14.86-18.57a6,6,0,0,0,1.3-4.11,78.07,78.07,0,0,1,0-8.92,6,6,0,0,0-1.3-4.11L38,100.87a94.13,94.13,0,0,1,7.17-17.34L68.79,80.9a6,6,0,0,0,3.82-2,75.14,75.14,0,0,1,6.31-6.31,6,6,0,0,0,2-3.82l2.63-23.63A94.28,94.28,0,0,1,100.86,38l18.57,14.86a6,6,0,0,0,4.11,1.3,78.07,78.07,0,0,1,8.92,0,6,6,0,0,0,4.11-1.3L155.13,38a94.13,94.13,0,0,1,17.34,7.17l2.63,23.64a6,6,0,0,0,2,3.82,75.14,75.14,0,0,1,6.31,6.31,6,6,0,0,0,3.82,2l23.63,2.63A94.28,94.28,0,0,1,218,100.86l-14.86,18.57a6,6,0,0,0-1.3,4.11,78.07,78.07,0,0,1,0,8.92,6,6,0,0,0,1.3,4.11L218,155.13A94.13,94.13,0,0,1,210.85,172.47Z"/></svg>';
@@ -697,13 +713,15 @@ footer a { color: var(--muted); }
     $('p-ora').innerHTML = clockText();
     $('p-ora').className = 'ora ' + classeOra(cfg);
     $('p-ora').parentNode.className = cfg.clockSide === 'right' ? 'dx' : '';
-    $('p-veil').className = 'veil' + (cfg.clockSide === 'right' ? ' dx' : '');
+    var seconda = inizioSeconda(cfg), testo = cfg.tileStyle !== 'logo' && cfg.tileStyle !== 'icon';
+    $('p-veil').className = 'veil' + (cfg.clockSide === 'right' ? ' dx' : '') + (seconda ? ' due' + (testo ? ' nomi' : '') : '');
     meteo();
     allineaOra($('p-ora'), $('p-meteo'), cfg);
-    var nav = $('p-nav'), modo = cfg.tileStyle === 'logo' || cfg.tileStyle === 'icon' ? cfg.tileStyle : 'text';
+    var nav = $('p-nav'), nav2 = $('p-nav2'), modo = cfg.tileStyle === 'logo' || cfg.tileStyle === 'icon' ? cfg.tileStyle : 'text';
     nav.className = modo === 'text' ? '' : 'icons' + (cfg.labels === 'none' ? ' bare' : cfg.labels === 'selected' ? ' only-sel' : '');
+    nav2.className = seconda ? nav.className : '';
     $('labels-row').hidden = modo === 'text';
-    nav.innerHTML = '';
+    nav.innerHTML = nav2.innerHTML = '';
     (cfg.tiles || []).forEach(function (tile, i) {
       var s = document.createElement('span');
       if (i === 0) s.className = 'sel';
@@ -723,14 +741,17 @@ footer a { color: var(--muted); }
       var label = document.createElement('i');
       label.textContent = tile.title;
       s.appendChild(label);
-      nav.appendChild(s);
+      (i < seconda ? nav2 : nav).appendChild(s);
     });
     // Hidden if asked, unless there are no tiles.
-    if (cfg.hideGear && (cfg.tiles || []).length) return;
-    var g = document.createElement('span');
-    g.innerHTML = GEAR;
-    g.className = 'gear' + ((cfg.tiles || []).length ? '' : ' sel');
-    nav.appendChild(g);
+    if (!cfg.hideGear || !(cfg.tiles || []).length) {
+      var g = document.createElement('span');
+      g.innerHTML = GEAR;
+      g.className = 'gear' + ((cfg.tiles || []).length ? '' : ' sel');
+      nav.appendChild(g);
+    }
+    // Two rows: the upper one above the lower, as on the Home.
+    nav2.style.bottom = seconda ? 104 + nav.offsetHeight + (modo === 'text' ? 80 : 48) + 'px' : '';
   }
 
   // The weather line as the Home draws it, asked again only when the city or the units change.
@@ -808,7 +829,7 @@ footer a { color: var(--muted); }
     });
   }
 
-  function saveTiles() { save({ tiles: cfg.tiles }); renderTiles(); preview(); }
+  function saveTiles() { save(cfg.twoRows ? { tiles: cfg.tiles, rowBreak: cfg.rowBreak } : { tiles: cfg.tiles }); renderTiles(); preview(); }
 
   // Drag a row by its handle; the order is saved when it is let go.
   function maniglia(li) {
@@ -852,6 +873,8 @@ footer a { color: var(--muted); }
         var per = {}, ordine = [];
         cfg.tiles.forEach(function (x) { per[x.id] = x; });
         for (var n = 0; n < list.children.length; n++) {
+          // The break: the lower row starts with the tile after it.
+          if (list.children[n].id === 'row-break') { cfg.rowBreak = ordine.length; continue; }
           var id = list.children[n].getAttribute('data-id');
           if (per[id]) ordine.push(per[id]);
         }
@@ -1125,7 +1148,10 @@ footer a { color: var(--muted); }
       e.textContent = t.empty;
       list.appendChild(e);
     }
+    // With two rows, New row before the tile the lower row starts with.
+    var rottura = cfg.twoRows ? Math.max(0, Math.min(+cfg.rowBreak || 0, tiles.length)) : -1;
     tiles.forEach(function (tile, i) {
+      if (i === rottura) list.appendChild(rigaNuova(rottura));
       var li = document.createElement('li');
       li.setAttribute('data-id', tile.id);
       if (window.PointerEvent) li.appendChild(maniglia(li));
@@ -1211,20 +1237,29 @@ footer a { color: var(--muted); }
         b.innerHTML = svg(a[0]);
         b.setAttribute('aria-label', t[a[0]] + ': ' + tile.title);
         b.title = t[a[0]];
-        if ((a[0] === 'up' && i === 0) || (a[0] === 'down' && i === tiles.length - 1)) b.disabled = true;
+        // At the ends, unless the break is there: then the tile only changes row.
+        if ((a[0] === 'up' && i === 0 && rottura !== 0) || (a[0] === 'down' && i === tiles.length - 1 && rottura !== tiles.length)) b.disabled = true;
         b.onclick = function () {
           // cfg.tiles as it is now: a save since this row was drawn has replaced it.
           var now = cfg.tiles, k = -1;
           for (var n = 0; n < now.length; n++) if (now[n].id === tile.id) k = n;
           if (k === -1) return;
-          if (a[0] === 'drop') now.splice(k, 1);
+          var r = cfg.twoRows ? +cfg.rowBreak || 0 : -1;
+          if (a[0] === 'drop') {
+            now.splice(k, 1);
+            if (k < r) cfg.rowBreak = r - 1; // the break stays between the same tiles
+          }
+          // Next to the break, a tile moves across it, into the other row.
+          else if (a[0] === 'down' && k === r - 1) cfg.rowBreak = r - 1;
+          else if (a[0] === 'up' && k === r) cfg.rowBreak = r + 1;
           else {
             var to = a[0] === 'up' ? k - 1 : k + 1;
             if (to < 0 || to >= now.length) return;
             var x = now[k]; now[k] = now[to]; now[to] = x;
           }
           saveTiles();
-          var again = $('tiles').children[a[0] === 'drop' ? Math.min(k, now.length - 1) : (a[0] === 'up' ? k - 1 : k + 1)];
+          var again = a[0] === 'drop' ? $('tiles').querySelectorAll('li[data-id]')[Math.min(k, now.length - 1)] :
+            $('tiles').querySelector('li[data-id="' + tile.id + '"]');
           var focus = again && again.querySelector(a[0] === 'drop' ? 'input' : '.icon-btn:not([disabled])');
           if (focus) focus.focus();
         };
@@ -1232,7 +1267,48 @@ footer a { color: var(--muted); }
       });
       list.appendChild(li);
     });
+    if (rottura === tiles.length) list.appendChild(rigaNuova(rottura));
     renderAdd();
+  }
+
+  // New row, the break between the two rows: moved like a tile, by its handle or its arrows.
+  function rigaNuova(k) {
+    var li = document.createElement('li');
+    li.id = 'row-break';
+    li.className = 'break';
+    if (window.PointerEvent) li.appendChild(maniglia(li));
+    var ic = document.createElement('span');
+    ic.className = 'ic dev';
+    ic.innerHTML = svg('rows');
+    li.appendChild(ic);
+    var name = document.createElement('div');
+    name.className = 'name';
+    name.innerHTML = '<span class="title"></span><span class="sub"></span>';
+    name.firstChild.textContent = t.newRow;
+    name.lastChild.textContent = t.newRowSub;
+    li.appendChild(name);
+    [['up', -1], ['down', 1]].forEach(function (a) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'icon-btn';
+      b.innerHTML = svg(a[0]);
+      b.setAttribute('aria-label', t[a[0]] + ': ' + t.newRow);
+      b.title = t[a[0]];
+      b.disabled = k + a[1] < 0 || k + a[1] > (cfg.tiles || []).length;
+      b.onclick = function () {
+        var to = (+cfg.rowBreak || 0) + a[1];
+        if (to < 0 || to > cfg.tiles.length) return;
+        cfg.rowBreak = to;
+        saveTiles();
+        var focus = $('row-break') && $('row-break').querySelector('.icon-btn:not([disabled])');
+        if (focus) focus.focus();
+      };
+      li.appendChild(b);
+    });
+    var vuoto = document.createElement('span'); // in Remove's place, so the arrows line up with the tiles'
+    vuoto.className = 'vuoto';
+    li.appendChild(vuoto);
+    return li;
   }
 
   function renderAdd() {
@@ -1543,6 +1619,15 @@ footer a { color: var(--muted); }
   $('power').onchange = function () { save({ openAtPowerOn: this.checked }); };
   $('open-apps').onchange = function () { save({ openApps: this.checked }); };
   $('hide-gear').onchange = function () { save({ hideGear: this.checked }); };
+  // On, the break where it was, else in the middle of the tiles; off, it is kept for the next time.
+  $('two-rows').onchange = function () {
+    var n = (cfg.tiles || []).length, k = cfg.rowBreak, change = { twoRows: this.checked };
+    if (this.checked && !(typeof k === 'number' && k > 0 && k < n)) change.rowBreak = cfg.rowBreak = Math.ceil(n / 2);
+    cfg.twoRows = this.checked;
+    save(change);
+    renderTiles();
+    preview();
+  };
 
   // The pause is the server's, for an hour at most, and ends with a restart of the TV.
   function renderSaver() {
@@ -1752,6 +1837,7 @@ footer a { color: var(--muted); }
     $('veil').value = cfg.veil;
     $('power').checked = cfg.openAtPowerOn;
     $('open-apps').checked = !!cfg.openApps;
+    $('two-rows').checked = !!cfg.twoRows;
     $('hide-gear').checked = !!cfg.hideGear;
     $('hide-gear-sub').textContent = t.hideGearLede + 'http://' + (cfg.address || location.hostname) + ':' + (cfg.port || location.port || 80) + t.hideGearEnd;
     renderSaver();

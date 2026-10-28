@@ -119,6 +119,9 @@ var DEFAULTS = {
   tiles: null,
   tileStyle: 'text',
   labels: 'all',
+  // Two rows, off as before 1.0.10; the break is kept when they are turned off.
+  twoRows: false,
+  rowBreak: null,
   openApps: false,
   startTile: 'last',
   hideGear: false,
@@ -403,6 +406,9 @@ function validate(body, keyNames) {
     else if (k === 'tileStyle') { if (['text', 'logo', 'icon'].indexOf(v) === -1) return 'tileStyle'; out[k] = v; }
     // Names under logos and icons: all of them, the selected one's only, or none.
     else if (k === 'labels') { if (['all', 'selected', 'none'].indexOf(v) === -1) return 'labels'; out[k] = v; }
+    else if (k === 'twoRows') { if (typeof v !== 'boolean') return 'twoRows'; out[k] = v; }
+    // Where the lower row starts among the tiles: one number, so never a third row.
+    else if (k === 'rowBreak') { if (v !== null && (typeof v !== 'number' || v % 1 || v < 0 || v > MAX_TILES)) return 'rowBreak'; out[k] = v; }
     else if (k === 'veil') { if (!num(v, 0, 100)) return 'veil'; out[k] = Math.round(v); }
     else if (k === 'openAtPowerOn') { if (typeof v !== 'boolean') return 'openAtPowerOn'; out[k] = v; }
     // The Home's open apps button; off, as before 1.0.7, and then the TV is not even asked.

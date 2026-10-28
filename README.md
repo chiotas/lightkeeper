@@ -56,7 +56,7 @@ Open **http://&lt;your-tv's-address&gt;:8090** on a phone or computer. On the TV
 The preview at the top is the Home as the TV draws it, and it changes as you go. Lightkeeper saves each change at once, and the TV shows it within a few seconds.
 
 - **Tiles.** Choose apps and inputs, which keep the names you gave them on the TV, and web pages, by a name and an address, which open in the TV's browser. Put them in order, by dragging them by their handle on a phone or computer or with the arrows, and rename them if you like. Up to fifty: the row slides as you move along it. At start the Home selects the tile you opened last, or the first if you prefer, and the settings gear at the end of the row can be hidden.
-- **Names, logos or app icons.** Show the names alone; white logos, with the app's own icon where there is no logo; or every app's own icon from the TV. Any tile can take another logo or icon from Lightkeeper's catalogue: choose its icon in the settings. With logos or icons, the names can show under every tile, under the selected one only, or not at all, which leaves the icons alone with a short line under the selected one.
+- **Names, logos or app icons.** Show the names alone; white logos, with the app's own icon where there is no logo; or every app's own icon from the TV. Any tile can take another logo or icon from Lightkeeper's catalogue: choose its icon in the settings. With logos or icons, the names can show under every tile, under the selected one only, or not at all, which leaves the icons alone with a short line under the selected one. *Two rows*, off until you turn it on, puts the tiles in two rows: move *New row* in the list to choose where the lower one starts. Each row slides by itself. Turned off, the tiles go back to one row in the same order.
 - **Your own logo.** A tile's icon grid has *Upload a logo*, for a logo of yours. It must be a PNG with a transparent background and the logo in white, at least 240 pixels on its longer side. The page checks the file and says what is wrong, trims the empty edges and sends the TV a copy at most 240 pixels tall and 2000 wide. The TV keeps it with your settings, in `/var/lib/lightkeeper/logos`. The cross on it takes it away, and the tiles that showed it go back to their own logo.
 - **Open apps.** With *Open apps button* on, a button before the gear shows how many apps are open on the TV and lists them, with *Close all* at the end: OK closes one, Back returns to the Home. Lightkeeper, inputs, Live TV and LG's Home stay out of the list. The button is off until you turn it on.
 - **Inputs.** Each input shows the device plugged into it: PlayStation 5, Xbox, Nintendo Switch, Apple TV, Chromecast, Fire TV and more, or a plain TV, media player, game console or HDMI icon. *Automatic*, the first choice, guesses it from the tile's name, and Live TV shows a TV.
@@ -67,7 +67,7 @@ The preview at the top is the Home as the TV draws it, and it changes as you go.
 - **Address.** The page's port: 8090, unless you choose another or another program on the TV already has it (see *Another port* in [Troubleshooting](#troubleshooting)).
 - **PIN.** An optional PIN for the settings page.
 
-On the remote: **← →** to move, **OK** to open, **Back** to leave, **↓** for LG's own Home. With the Magic Remote's pointer, the arrows at the ends of a long row, or the wheel, slide it.
+On the remote: **← →** to move, **OK** to open, **Back** to leave, **↓** for LG's own Home. With *Two rows*, **↑ ↓** go from one row to the other, and **↓** on the lower row opens LG's Home. With the Magic Remote's pointer, the arrows at the ends of a long row, or the wheel, slide it.
 
 ## Remove it
 
@@ -230,7 +230,7 @@ Poi aprite Lightkeeper una volta dalle app della TV (via SSH si apre da sola). A
 **Impostazioni.** Aprite **http://&lt;indirizzo-della-TV&gt;:8090** dal telefono o dal computer, oppure scegliete l'ingranaggio in fondo alla fila sulla TV, che mostra anche l'indirizzo. L'anteprima in alto è la Home come la disegna la TV e cambia mentre si regola. Ogni modifica si salva subito. Si possono scegliere:
 
 - le voci, cioè app e ingressi coi loro nomi e pagine web con nome e indirizzo, che si aprono nel browser della TV, fino a cinquanta, da riordinare trascinandole o con le frecce e da rinominare; all'avvio la Home seleziona l'ultima voce aperta o la prima, e l'ingranaggio in fondo alla fila si può nascondere;
-- solo nomi, loghi bianchi o icone delle app, e per ogni voce un altro logo o icona dal catalogo di Lightkeeper, da scegliere con l'icona accanto alla voce; con loghi e icone, i nomi sotto tutte le voci, solo sotto quella scelta o da nessuna parte (solo icone);
+- solo nomi, loghi bianchi o icone delle app, e per ogni voce un altro logo o icona dal catalogo di Lightkeeper, da scegliere con l'icona accanto alla voce; con loghi e icone, i nomi sotto tutte le voci, solo sotto quella scelta o da nessuna parte (solo icone); due righe (*Two rows*), spente finché non le accendete: *New row* nella lista sceglie dove comincia la riga di sotto, e ogni riga scorre da sola; spegnendole, le voci tornano in una riga nello stesso ordine;
 - un logo vostro per una voce, con *Upload a logo* nella griglia delle icone: un PNG con lo sfondo trasparente e il logo bianco, di almeno 240 pixel sul lato lungo. La pagina controlla il file e dice cosa non va, toglie i bordi vuoti e manda alla TV una copia alta al massimo 240 pixel e larga al massimo 2000. La TV lo tiene con le impostazioni, in `/var/lib/lightkeeper/logos`; la crocetta lo toglie e le voci che lo mostravano tornano al loro logo;
 - il pulsante delle app aperte (*Open apps button*), spento finché non lo accendete: prima dell'ingranaggio mostra quante app sono aperte sulla TV e le elenca, OK ne chiude una, *Close all* tutte, Indietro torna alla Home;
 - per ogni ingresso l'apparecchio collegato, oppure un'icona generica (TV, lettore multimediale, console, HDMI); *Automatic*, la prima scelta, lo indovina dal nome della voce, e Live TV mostra una TV;
@@ -241,7 +241,7 @@ Poi aprite Lightkeeper una volta dalle app della TV (via SSH si apre da sola). A
 - la porta della pagina (*Address*);
 - un PIN facoltativo per la pagina.
 
-Sul telecomando: **← →** per scegliere, **OK** per aprire, **Indietro** per uscire, **↓** per la Home di LG. Col puntatore del Magic Remote, una fila lunga scorre con le frecce ai lati o con la rotella.
+Sul telecomando: **← →** per scegliere, **OK** per aprire, **Indietro** per uscire, **↓** per la Home di LG. Con due righe, **↑ ↓** passano da una riga all'altra e **↓** sulla riga di sotto apre la Home di LG. Col puntatore del Magic Remote, una fila lunga scorre con le frecce ai lati o con la rotella.
 
 **Disinstallazione.** Dalla pagina (*Remove Lightkeeper*), con `./lightkeeper.sh uninstall 192.168.1.50`, o cancellando l'app dalla TV, che se ne accorge entro due minuti se resta accesa. Il tasto Home torna alla Home di LG, l'avvio automatico sparisce e le impostazioni vengono cancellate.
 

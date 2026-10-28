@@ -38,6 +38,11 @@ body {
     radial-gradient(1100px 620px at 100% 0, rgba(18,13,8,.92) 0, rgba(18,13,8,0) 100%),
     linear-gradient(to top, rgba(18,13,8,1) 0, rgba(18,13,8,.7) 20%, rgba(18,13,8,0) 50%);
 }
+/* With two rows, the dark from the bottom reaches higher, so the upper row reads as well. */
+#veil.due { background: radial-gradient(1100px 620px at 0 0, rgba(18,13,8,.92) 0, rgba(18,13,8,0) 100%), linear-gradient(to top, rgba(18,13,8,1) 0, rgba(18,13,8,.74) 36%, rgba(18,13,8,0) 68%); }
+#veil.due.dx { background: radial-gradient(1100px 620px at 100% 0, rgba(18,13,8,.92) 0, rgba(18,13,8,0) 100%), linear-gradient(to top, rgba(18,13,8,1) 0, rgba(18,13,8,.74) 36%, rgba(18,13,8,0) 68%); }
+#veil.due.nomi { background: radial-gradient(1100px 620px at 0 0, rgba(18,13,8,.92) 0, rgba(18,13,8,0) 100%), linear-gradient(to top, rgba(18,13,8,1) 0, rgba(18,13,8,.7) 26%, rgba(18,13,8,0) 56%); }
+#veil.due.nomi.dx { background: radial-gradient(1100px 620px at 100% 0, rgba(18,13,8,.92) 0, rgba(18,13,8,0) 100%), linear-gradient(to top, rgba(18,13,8,1) 0, rgba(18,13,8,.7) 26%, rgba(18,13,8,0) 56%); }
 header, nav, #hint { position: absolute; left: 112px; }
 header { top: 68px; }
 /* The clock and weather on the right, as far from the edge as on the left. */
@@ -145,8 +150,8 @@ body.pannello header, body.pannello nav, body.pannello #hint { visibility: hidde
 .freccia svg { width: 60px; height: 60px; -webkit-filter: drop-shadow(0 2px 10px rgba(0, 0, 0, .6)); filter: drop-shadow(0 2px 10px rgba(0, 0, 0, .6)); }
 .freccia:hover { color: #f4f1ec; }
 /* The row fades under each arrow, which says there is more that way. */
-#fr-sx { left: 0; padding-left: 28px; justify-content: flex-start; background: radial-gradient(farthest-side at 0 50%, rgba(18, 13, 8, .9), rgba(18, 13, 8, 0)); }
-#fr-dx { right: 0; padding-right: 28px; justify-content: flex-end; background: radial-gradient(farthest-side at 100% 50%, rgba(18, 13, 8, .9), rgba(18, 13, 8, 0)); }
+#fr-sx, #fr-sx2 { left: 0; padding-left: 28px; justify-content: flex-start; background: radial-gradient(farthest-side at 0 50%, rgba(18, 13, 8, .9), rgba(18, 13, 8, 0)); }
+#fr-dx, #fr-dx2 { right: 0; padding-right: 28px; justify-content: flex-end; background: radial-gradient(farthest-side at 100% 50%, rgba(18, 13, 8, .9), rgba(18, 13, 8, 0)); }
 body.puntatore .freccia.su { display: flex; }
 body.pannello .freccia { visibility: hidden; }
 #hint {
@@ -159,8 +164,9 @@ body.pannello .freccia { visibility: hidden; }
 <body>
 <div id="veil"></div>
 <header id="testa"><div id="ora"></div><div id="meteo"></div></header>
-<nav></nav>
+<nav></nav><nav id="sopra"></nav>
 <a class="freccia" id="fr-sx" aria-label="Back along the row"></a><a class="freccia" id="fr-dx" aria-label="On along the row"></a>
+<a class="freccia" id="fr-sx2" aria-label="Back along the upper row"></a><a class="freccia" id="fr-dx2" aria-label="On along the upper row"></a>
 <div id="hint"></div>
 <div id="aperte" hidden><h2></h2><div class="righe"><ul></ul></div><p></p></div>
 <script src="logos.js"></script>
@@ -180,7 +186,8 @@ var TEXT = { settings: 'Settings', phone: 'or on your phone: ', empty: 'Choose y
   open1: '1 open app', openN: ' open apps', openTitle: 'Open apps', closeAll: 'Close all', openNote: 'OK closes an app · Back returns to the Home',
   none: 'No open apps', openNoteEmpty: 'Back returns to the Home' };
 
-var nav = document.querySelector('nav');
+// The row along the bottom, as always; with Two rows, the tiles before the break go in the one above.
+var nav = document.querySelector('nav'), navSopra = document.getElementById('sopra');
 var ora = document.getElementById('ora');
 var meteoEl = document.getElementById('meteo');
 var hint = document.getElementById('hint');
@@ -191,6 +198,8 @@ var chiamate = []; // the bridges stay alive until the service answers
 var cfg = cached() || { tiles: [], veil: 80, clock: '24', tileStyle: 'text', units: 'c', weather: null, background: {} };
 var shown = '';     // the config the page shows, as JSON
 var voci = [];      // the tiles, the open apps' button when it is on, then the gear
+var tessere = [];   // each one's element, in its row
+var seconda = 0;    // where the lower row starts with two rows; 0 with one
 var aperte = [];    // the apps open on the TV, as the server lists them
 var sel = 0;
 var meteoAlle = 0, meteoPer = '';
@@ -228,16 +237,31 @@ function iniziale() {
   return Math.min(n, voci.length - 1);
 }
 
-var spostamento = 0; // how far a row wider than the screen has slid
+// The row a tile is in, and how far a row wider than the screen has slid (sposta).
+function riga(k) { return k < seconda ? navSopra : nav; }
+function trasla(r, x) {
+  r.sposta = x;
+  r.style.webkitTransform = r.style.transform = 'translateX(' + -x + 'px)';
+}
+nav.sposta = navSopra.sposta = 0;
+// Two rows: the upper one sits above the lower, whatever its height, which the typeface sets
+// once loaded: placed again at each move and when the fonts are in.
+function posiziona() {
+  var testo = cfg.tileStyle !== 'logo' && cfg.tileStyle !== 'icon';
+  navSopra.style.bottom = seconda ? 104 + nav.offsetHeight + (testo ? 80 : 48) + 'px' : '';
+  frSx2.style.bottom = frDx2.style.bottom = navSopra.style.bottom;
+}
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(function () { posiziona(); });
 function seleziona(i, colPuntatore) {
   sel = Math.max(0, Math.min(voci.length - 1, i));
-  for (var k = 0; k < nav.children.length; k++) nav.children[k].className = (k === sel ? 'sel' : '') + (voci[k].gear ? ' gear' : voci[k].aperte ? ' gear open' : '');
+  posiziona();
+  for (var k = 0; k < tessere.length; k++) tessere[k].className = (k === sel ? 'sel' : '') + (voci[k].gear ? ' gear' : voci[k].aperte ? ' gear open' : '');
   // A row wider than the screen slides, with the arrows only, so the chosen tile stays in view.
-  var el = nav.children[sel], largo = 1920 - 224;
+  var el = tessere[sel], r = riga(sel), largo = 1920 - 224, x = r.sposta;
   if (el && !colPuntatore) {
-    if (el.offsetLeft + el.offsetWidth > spostamento + largo) spostamento = el.offsetLeft + el.offsetWidth - largo;
-    if (el.offsetLeft < spostamento) spostamento = el.offsetLeft;
-    nav.style.webkitTransform = nav.style.transform = 'translateX(' + -spostamento + 'px)';
+    if (el.offsetLeft + el.offsetWidth > x + largo) x = el.offsetLeft + el.offsetWidth - largo;
+    if (el.offsetLeft < x) x = el.offsetLeft;
+    trasla(r, x);
     caricaVisibili();
     frecce();
   }
@@ -288,9 +312,8 @@ function riempi(box, v, modo) {
 // Up to fifty tiles: pictures are drawn as they come within a screen of view, not all at once.
 var caricatori = [];
 function caricaVisibili() {
-  var da = spostamento - 1920, fino = spostamento + 2 * 1920;
   for (var k = 0; k < caricatori.length; k++) {
-    var el = caricatori[k] && nav.children[k];
+    var el = caricatori[k] && tessere[k], da = riga(k).sposta - 1920, fino = riga(k).sposta + 2 * 1920;
     if (el && el.offsetLeft + el.offsetWidth >= da && el.offsetLeft <= fino) {
       var f = caricatori[k];
       caricatori[k] = null;
@@ -332,9 +355,13 @@ function disegna() {
   // Names only; logos, or the TV's icon where an app has none; the TV's icons. Inputs show their device.
   var modo = cfg.tileStyle === 'logo' || cfg.tileStyle === 'icon' ? cfg.tileStyle : 'text';
   nav.className = modo === 'text' ? '' : 'icons' + (cfg.labels === 'none' ? ' bare' : cfg.labels === 'selected' ? ' only-sel' : '');
-  nav.innerHTML = '';
-  spostamento = 0;
+  nav.innerHTML = navSopra.innerHTML = '';
+  trasla(nav, 0);
+  trasla(navSopra, 0);
   caricatori = [];
+  tessere = [];
+  seconda = inizioSeconda(cfg);
+  navSopra.className = seconda ? nav.className : '';
   voci = (cfg.tiles || []).slice();
   if (cfg.openApps) voci.push({ aperte: true });
   // Without tiles the gear stays, as the Home would have nothing to choose.
@@ -362,8 +389,11 @@ function disegna() {
     }
     a.onmouseover = function () { seleziona(i, true); };
     a.onclick = function () { lancia(i); };
-    nav.appendChild(a);
+    tessere.push(a);
+    riga(i).appendChild(a);
   });
+  posiziona();
+  veil.className = (cfg.clockSide === 'right' ? 'dx' : '') + (seconda ? ' due' + (modo === 'text' ? ' nomi' : '') : '');
   veil.style.opacity = (typeof cfg.veil === 'number' ? cfg.veil : 80) / 100;
   // An uploaded picture comes from the server; the app's own backgrounds are beside this page.
   // With the server's start in the address: a picture that failed while it was down is asked again.
@@ -385,14 +415,28 @@ document.addEventListener('keydown', function (e) {
   if (e.keyCode >= 37 && e.keyCode <= 40 || e.keyCode === 1537) conPuntatore(false);
   if (e.keyCode === 1536) conPuntatore(true);
   if (!pannello.hidden) return tastoPannello(e);
-  if (e.keyCode === 37) seleziona(sel - 1);
-  else if (e.keyCode === 39) seleziona(sel + 1);
+  // With two rows, Left and Right stay in the row; Up and Down go from one row to the other,
+  // and Down on the lower row opens LG's Home, as it always has.
+  if (e.keyCode === 37) seleziona(seconda && sel === seconda ? sel : sel - 1);
+  else if (e.keyCode === 39) seleziona(seconda && sel === seconda - 1 ? sel : sel + 1);
   else if (e.keyCode === 13) lancia(sel);
+  else if (e.keyCode === 38 && seconda && sel >= seconda) seleziona(vicina(true));
+  else if (e.keyCode === 40 && seconda && sel < seconda) seleziona(vicina(false));
   else if (e.keyCode === 40) apri(LG_HOME); // Down: LG's Home
   else if (e.keyCode === 461 && sistema) sistema.platformBack(); // Back
   else return;
   e.preventDefault();
 });
+
+// The tile in the other row nearest on the screen to the selected one, by their middles.
+function vicina(sopra) {
+  var el = tessere[sel], x = el.offsetLeft - riga(sel).sposta + el.offsetWidth / 2, meglio = -1, d = 0;
+  for (var k = sopra ? 0 : seconda; k < (sopra ? seconda : voci.length); k++) {
+    var dk = Math.abs(tessere[k].offsetLeft - riga(k).sposta + tessere[k].offsetWidth / 2 - x);
+    if (meglio === -1 || dk < d) { meglio = k; d = dk; }
+  }
+  return meglio;
+}
 
 /*
  * Open apps, which the server reads from the TV and closes: the button shows when it
@@ -521,10 +565,11 @@ function tastoPannello(e) {
  * by most of a screen, and so does resting on an arrow, every 0.6 s; the wheel too.
  */
 var puntatore = false, frSx = document.getElementById('fr-sx'), frDx = document.getElementById('fr-dx');
+var frSx2 = document.getElementById('fr-sx2'), frDx2 = document.getElementById('fr-dx2');
 var giro = null, rotella = 0;
 // Phosphor Icons' carets, light weight (MIT).
-frSx.innerHTML = '<svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M164.24,203.76a6,6,0,1,1-8.48,8.48l-80-80a6,6,0,0,1,0-8.48l80-80a6,6,0,0,1,8.48,8.48L88.49,128Z"/></svg>';
-frDx.innerHTML = '<svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M180.24,132.24l-80,80a6,6,0,0,1-8.48-8.48L167.51,128,91.76,52.24a6,6,0,0,1,8.48-8.48l80,80A6,6,0,0,1,180.24,132.24Z"/></svg>';
+frSx.innerHTML = frSx2.innerHTML = '<svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M164.24,203.76a6,6,0,1,1-8.48,8.48l-80-80a6,6,0,0,1,0-8.48l80-80a6,6,0,0,1,8.48,8.48L88.49,128Z"/></svg>';
+frDx.innerHTML = frDx2.innerHTML = '<svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M180.24,132.24l-80,80a6,6,0,0,1-8.48-8.48L167.51,128,91.76,52.24a6,6,0,0,1,8.48-8.48l80,80A6,6,0,0,1,180.24,132.24Z"/></svg>';
 
 function conPuntatore(on) {
   if (on === puntatore) return;
@@ -533,26 +578,29 @@ function conPuntatore(on) {
   else { document.body.classList.remove('puntatore'); clearTimeout(giro); }
   frecce();
 }
-// How far the row can slide, and the arrows where it can.
-function margine() { return Math.max(0, nav.offsetWidth - (1920 - 224)); }
+// How far a row can slide, and the arrows where it can: each row has its own.
+function margine(r) { return Math.max(0, r.offsetWidth - (1920 - 224)); }
 function frecce() {
-  frSx.style.height = frDx.style.height = nav.offsetHeight + 'px';
-  frSx.className = 'freccia' + (spostamento > 0 ? ' su' : '');
-  frDx.className = 'freccia' + (spostamento < margine() ? ' su' : '');
+  [[nav, frSx, frDx], [navSopra, frSx2, frDx2]].forEach(function (f) {
+    f[1].style.height = f[2].style.height = f[0].offsetHeight + 'px';
+    f[1].className = 'freccia' + (f[0].sposta > 0 ? ' su' : '');
+    f[2].className = 'freccia' + (f[0].sposta < margine(f[0]) ? ' su' : '');
+  });
 }
-function scorri(dir) {
-  var prima = spostamento;
-  spostamento = Math.max(0, Math.min(margine(), spostamento + dir * (1920 - 224 - 240)));
-  if (spostamento === prima) return clearTimeout(giro);
-  nav.style.webkitTransform = nav.style.transform = 'translateX(' + -spostamento + 'px)';
+// The row given, or the selected tile's.
+function scorri(dir, r) {
+  r = r || riga(sel);
+  var prima = r.sposta, x = Math.max(0, Math.min(margine(r), prima + dir * (1920 - 224 - 240)));
+  if (x === prima) return clearTimeout(giro);
+  trasla(r, x);
   caricaVisibili();
   frecce();
 }
-[[frSx, -1], [frDx, 1]].forEach(function (f) {
-  f[0].onclick = function () { scorri(f[1]); };
+[[frSx, -1, nav], [frDx, 1, nav], [frSx2, -1, navSopra], [frDx2, 1, navSopra]].forEach(function (f) {
+  f[0].onclick = function () { scorri(f[1], f[2]); };
   f[0].onmouseover = function () {
     clearTimeout(giro);
-    giro = setTimeout(function ancora() { scorri(f[1]); giro = setTimeout(ancora, 600); }, 600);
+    giro = setTimeout(function ancora() { scorri(f[1], f[2]); giro = setTimeout(ancora, 600); }, 600);
   };
   f[0].onmouseout = function () { clearTimeout(giro); };
 });

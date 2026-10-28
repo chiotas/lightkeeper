@@ -307,12 +307,21 @@ assert.equal(s.validate({ tiles: many }, keys), 'tiles');
 assert.deepEqual(s.validate({ tileStyle: 'logo', labels: 'none' }, keys), { tileStyle: 'logo', labels: 'none' });
 assert.deepEqual(s.validate({ labels: 'selected' }, keys), { labels: 'selected' });
 assert.equal(s.validate({ labels: 'some' }, keys), 'labels');
+// Two rows: off unless chosen, and the break is a single number, so never a third row.
+assert.deepEqual([s.DEFAULTS.twoRows, s.DEFAULTS.rowBreak], [false, null]);
+assert.deepEqual(s.validate({ twoRows: true, rowBreak: 3 }, keys), { twoRows: true, rowBreak: 3 });
+assert.deepEqual(s.validate({ twoRows: false, rowBreak: null }, keys), { twoRows: false, rowBreak: null });
+assert.equal(s.validate({ twoRows: 'yes' }, keys), 'twoRows');
+[[2, 4], -1, 51, 2.5, '3'].forEach(function (v) { assert.equal(s.validate({ rowBreak: v }, keys), 'rowBreak', JSON.stringify(v)); });
 assert.deepEqual(s.validate({ tileStyle: 'logo', tiles: [{ id: 'com.webos.app.hdmi3', title: 'PS5', device: 'ps5' }] }, keys),
   { tileStyle: 'logo', tiles: [{ id: 'com.webos.app.hdmi3', title: 'PS5', device: 'ps5' }] });
 assert.equal(s.validate({ tiles: [{ id: 'netflix', title: 'Netflix', device: 'ps5' }] }, keys), 'tiles'); // apps have no device
 assert.equal(s.validate({ tiles: [{ id: 'com.webos.app.hdmi1', title: 'X', device: 'toaster' }] }, keys), 'tiles');
 assert.equal(s.validate({ preset: '../../etc/passwd' }, keys), 'preset');
 
+// Two rows at most: the Home has two of them, the settings' preview too.
+assert.equal(fs.readFileSync(path.join(__dirname, '..', 'app', 'index.html'), 'utf8').match(/<nav[ >]/g).length, 2);
+assert.equal(fs.readFileSync(path.join(__dirname, '..', 'app', 'service', 'settings.html'), 'utf8').match(/<nav[ >]/g).length, 2);
 // A row wider than the screen keeps each name on one line: tiles are flex items, which shrink.
 assert.ok(/\nnav a \{[^}]*white-space: nowrap;/.test(fs.readFileSync(path.join(__dirname, '..', 'app', 'index.html'), 'utf8')));
 
@@ -385,6 +394,14 @@ assert.equal(logos.logoDi({ id: amazoff.id, title: amazoff.title, logo: 'xbox' }
 assert.equal(logos.logoDi({ id: amazoff.id, title: amazoff.title, logo: 'xbox' }, 'text'), '');
 assert.equal(logos.logoDi({ id: 'com.webos.app.hdmi3', title: 'PS5', device: 'ps5', logo: 'tv' }, 'logo'), 'tv');
 assert.equal(logos.logoDi({ id: 'netflix', title: 'Netflix', logo: 'gone' }, 'logo'), 'netflix');
+// Two rows off, or not set as before 1.0.10: one row, wherever the break is. On: the break, if both rows have tiles.
+var otto = [1, 2, 3, 4, 5, 6, 7, 8].map(function (n) { return { id: 'app' + n, title: 'App ' + n }; });
+[undefined, false].forEach(function (on) {
+  [undefined, null, 0, 3, 8].forEach(function (k) { assert.equal(logos.inizioSeconda({ tiles: otto, twoRows: on, rowBreak: k }), 0); });
+});
+assert.equal(logos.inizioSeconda({ tiles: otto, twoRows: true, rowBreak: 3 }), 3);
+[null, 0, 8, 9, 2.5, '3'].forEach(function (k) { assert.equal(logos.inizioSeconda({ tiles: otto, twoRows: true, rowBreak: k }), 0, String(k)); });
+assert.equal(logos.inizioSeconda({ twoRows: true, rowBreak: 1 }), 0); // no tiles
 // The clock: no class, so the Home's rule for it as it has always been, unless a style or size is chosen.
 assert.equal(logos.classeOra({}), '');
 assert.equal(logos.classeOra({ clockStyle: 'thin', clockSize: 'medium' }), '');

@@ -279,6 +279,14 @@ function classeOra(c) {
   return out.join(' ');
 }
 
+// Where the lower row starts among the tiles, with Two rows on: at the break set in the
+// settings, if both rows have tiles. 0 for one row, as always. Never more than two rows:
+// there is a single break.
+function inizioSeconda(c) {
+  var k = c.rowBreak, n = (c.tiles || []).length;
+  return c.twoRows === true && typeof k === 'number' && k % 1 === 0 && k > 0 && k < n ? k : 0;
+}
+
 // What a tile opens: a web page in the TV's browser, as the gear does; else the app or input.
 function apertura(tile, browser) {
   return tile.url ? { id: browser, params: { target: tile.url } } : { id: tile.id };
