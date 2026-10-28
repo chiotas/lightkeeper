@@ -126,8 +126,10 @@ button, input, select { font: inherit; color: inherit; }
 .screen nav.icons.bare i { display: none; }
 .screen nav.icons.bare .logo, .screen nav.icons.bare img { margin-bottom: 0; }
 .screen nav.icons.bare span.gear { -webkit-align-self: center; align-self: center; }
-.screen nav svg { display: block; width: 46px; height: 46px; margin-bottom: 2px; }
-.screen nav.icons svg { width: 52px; height: 52px; margin-bottom: 4px; }
+/* The gear's size, as on the Home. Not every SVG in the row: up to 1.0.9 the logos drawn
+   as SVG, such as Netflix, YouTube or PS5, came out 52 x 52 here, whatever their own size. */
+.screen nav span.gear svg { display: block; width: 46px; height: 46px; margin-bottom: 2px; }
+.screen nav.icons span.gear svg { width: 52px; height: 52px; margin-bottom: 4px; }
 
 main section { padding: 34px 0 36px; border-top: 1px solid var(--line); }
 main section:first-child { border-top: 0; padding-top: 18px; }

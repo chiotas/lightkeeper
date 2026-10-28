@@ -322,6 +322,10 @@ assert.equal(s.validate({ preset: '../../etc/passwd' }, keys), 'preset');
 // Two rows at most: the Home has two of them, the settings' preview too.
 assert.equal(fs.readFileSync(path.join(__dirname, '..', 'app', 'index.html'), 'utf8').match(/<nav[ >]/g).length, 2);
 assert.equal(fs.readFileSync(path.join(__dirname, '..', 'app', 'service', 'settings.html'), 'utf8').match(/<nav[ >]/g).length, 2);
+// The preview's row sizes the gear only: a size for every SVG in it squeezed the logos drawn as SVG to 52 x 52.
+var paginaImpostazioni = fs.readFileSync(path.join(__dirname, '..', 'app', 'service', 'settings.html'), 'utf8');
+assert.ok(!/\.screen nav(\.icons)? svg \{/.test(paginaImpostazioni), 'a size for every SVG in the preview row');
+assert.ok(/\.screen nav\.icons span\.gear svg \{ width: 52px; height: 52px;/.test(paginaImpostazioni));
 // A row wider than the screen keeps each name on one line: tiles are flex items, which shrink.
 assert.ok(/\nnav a \{[^}]*white-space: nowrap;/.test(fs.readFileSync(path.join(__dirname, '..', 'app', 'index.html'), 'utf8')));
 
