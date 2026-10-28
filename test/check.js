@@ -313,6 +313,9 @@ assert.equal(s.validate({ tiles: [{ id: 'netflix', title: 'Netflix', device: 'ps
 assert.equal(s.validate({ tiles: [{ id: 'com.webos.app.hdmi1', title: 'X', device: 'toaster' }] }, keys), 'tiles');
 assert.equal(s.validate({ preset: '../../etc/passwd' }, keys), 'preset');
 
+// A row wider than the screen keeps each name on one line: tiles are flex items, which shrink.
+assert.ok(/\nnav a \{[^}]*white-space: nowrap;/.test(fs.readFileSync(path.join(__dirname, '..', 'app', 'index.html'), 'utf8')));
+
 // The device an HDMI label names (logos.js runs in the page; here only its pure part).
 var vm = require('vm'), logos = {};
 vm.runInNewContext(fs.readFileSync(path.join(__dirname, '..', 'app', 'logos.js'), 'utf8'), logos);
