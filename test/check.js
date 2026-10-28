@@ -318,7 +318,8 @@ var vm = require('vm'), logos = {};
 vm.runInNewContext(fs.readFileSync(path.join(__dirname, '..', 'app', 'logos.js'), 'utf8'), logos);
 [['PS5 Console giochi', 'ps5'], ['PlayStation 4', 'ps4'], ['Xbox Series X', 'xboxseries'], ['XBOX ONE', 'xbox'],
  ['Nintendo Switch 2', 'switch2'], ['Nintendo Switch', 'switch'], ['Steam Deck', 'steamdeck'], ['Apple TV 4K', 'appletv'], ['Shield TV', 'shield'],
- ['Chromecast', 'chromecast'], ['Google TV', 'googletv'], ['Fire TV Stick', 'firetv'], ['Game console', 'console'], ['HDMI 2', 'hdmi'], ['', 'hdmi']
+ ['Chromecast', 'chromecast'], ['Google TV', 'googletv'], ['Fire TV Stick', 'firetv'], ['Game console', 'console'], ['HDMI 2', 'hdmi'], ['', 'hdmi'],
+ ['Nintendo Wii', 'wii'], ['Wii', 'wii'], ['Roku Ultra', 'roku'], ['Roku', 'roku']
 ].forEach(function (c) { assert.equal(logos.indovinaApparecchio(c[0]), c[1], c[0]); });
 assert.equal(logos.logoDi({ id: 'netflix', title: 'Netflix' }, 'logo'), 'netflix');
 assert.equal(logos.logoDi({ id: 'netflix', title: 'Netflix' }, 'icon'), ''); // the TV's own icon
@@ -342,6 +343,10 @@ assert.equal(logos.logoDi({ id: 'com.webos.app.browser', title: 'Browser Web' },
 assert.equal(logos.logoDi({ id: 'com.webos.app.livetv', title: 'Canali TV' }, 'text'), 'tv');
 assert.equal(logos.logoDi({ id: 'com.webos.app.hdmi3', title: 'PlayStation 5' }, 'icon'), 'playstation5');
 assert.equal(logos.logoDi({ id: 'com.webos.app.hdmi1', title: 'Box', device: 'firetv' }, 'logo'), 'firetv');
+// Roku and Nintendo Wii, as asked on Reddit: as an input's device, and in the icon grid.
+assert.equal(logos.logoDi({ id: 'com.webos.app.hdmi1', title: 'HDMI 1', device: 'roku' }, 'logo'), 'roku');
+assert.equal(logos.logoDi({ id: 'com.webos.app.hdmi2', title: 'Wii' }, 'logo'), 'wii');
+assert.deepEqual([logos.SIMPLE_ICONS_NOMI.roku, logos.IMMAGINI_NOMI.wii], ['Roku', 'Wii']);
 assert.equal(logos.logoDi({ id: 'com.webos.app.hdmi2', title: 'Xbox Series X' }, 'logo'), 'xbox');
 // Every logo picture is in app/logos/ at the size the table gives; every Commons file listed has its
 // picture; every title leads to a drawing; arte, by the title its app has, gets its logo (October 2026).
