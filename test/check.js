@@ -57,6 +57,18 @@ assert.equal(s.DEFAULTS.clockSide, 'left');
 assert.deepEqual(s.validate({ clockSide: 'right' }, keys), { clockSide: 'right' });
 assert.deepEqual(s.validate({ clockSide: 'left' }, keys), { clockSide: 'left' });
 ['centre', 'Right', '', null, 1].forEach(function (v) { assert.equal(s.validate({ clockSide: v }, keys), 'clockSide', JSON.stringify(v)); });
+// The key's recheck: failed is asked again too, once a minute; after an hour of pending in a row it stops
+// until the key changes or the server restarts; a recheck interval that is not a number is a minute.
+var MIN = 60000, HOUR = 3600000, T = 1e12;
+assert.ok(s.recheckDue('failed', 'home', T + MIN, T, 0, MIN));
+assert.ok(!s.recheckDue('failed', 'home', T + MIN - 1, T, 0, MIN));
+assert.ok(s.recheckDue('noglasshouse', 'home', T + MIN, T, 0, MIN));
+assert.ok(!s.recheckDue('active', 'home', T + MIN, T, 0, MIN) && !s.recheckDue('failed', 'none', T + MIN, T, 0, MIN));
+assert.ok(s.recheckDue('pending', 'home', T + HOUR - 1, T + HOUR - MIN - 1, T, MIN));
+assert.ok(!s.recheckDue('pending', 'home', T + HOUR, T + HOUR - MIN, T, MIN));
+assert.ok(!s.recheckDue('pending', 'home', T + 5 * HOUR, T + HOUR - MIN, T, MIN));
+assert.equal(s.recheckEvery(undefined), MIN); assert.equal(s.recheckEvery('soon'), MIN); assert.equal(s.recheckEvery(''), MIN);
+assert.equal(s.recheckEvery('0'), 0); assert.equal(s.recheckEvery('5000'), 5000);
 // A PNG's size from its header; null for anything else.
 assert.deepEqual(s.pngSize(fs.readFileSync(path.join(__dirname, '..', 'app', 'logos', 'skyq.png'))), { width: 647, height: 236 });
 assert.equal(s.pngSize(fs.readFileSync(path.join(__dirname, '..', 'app', 'backgrounds', 'godrevy.jpg'))), null);

@@ -997,16 +997,40 @@ var keyStatus = 'off';
  * known then and the next one carries the new word. applyKey writes nothing
  * new when all is as set, and nothing at all where GlassHouse is still absent.
  */
-var KEY_RECHECK_MS = +(process.env.LIGHTKEEPER_KEY_RECHECK || 60000);
-var keyRecheckedAt = 0;
+var KEY_RECHECK_MS = recheckEvery(process.env.LIGHTKEEPER_KEY_RECHECK);
+var KEY_PENDING_MAX_MS = 3600000;
+var keyRecheckedAt = 0, keyPendingSince = 0;
+
+// Milliseconds, or the minute when the value is not a number: NaN would let every read ask the TV.
+function recheckEvery(v) { return /^\d+$/.test(String(v)) ? +v : 60000; }
+
+/*
+ * Whether a read asks again: while the key waits (pending, no GlassHouse) or
+ * failed, at most once every `every` ms. After an hour of pending in a row it
+ * stops asking, until the key is changed in the settings or the server
+ * restarts: a filter that has not reached the chain in an hour will not by
+ * itself, and each ask may rewrite the key map and restart GlassHouse.
+ */
+function recheckDue(status, key, now, at, pendingSince, every) {
+  if (key === 'none') return false;
+  if (status !== 'pending' && status !== 'noglasshouse' && status !== 'failed') return false;
+  if (status === 'pending' && pendingSince && now - pendingSince >= KEY_PENDING_MAX_MS) return false;
+  return now - at >= every;
+}
+
+// The hour of pending counts from the first pending in a row, or from a change of the key.
+function setKeyStatus(state, keyChanged) {
+  if (state !== 'pending') keyPendingSince = 0;
+  else if (keyChanged || keyStatus !== 'pending') keyPendingSince = Date.now();
+  keyStatus = state;
+}
+
 function recheckKey() {
-  if (keyStatus !== 'pending' && keyStatus !== 'noglasshouse') return;
-  if (config.key === 'none') return;
   var now = Date.now();
-  if (now - keyRecheckedAt < KEY_RECHECK_MS) return;
+  if (!recheckDue(keyStatus, config.key, now, keyRecheckedAt, keyPendingSince, KEY_RECHECK_MS)) return;
   keyRecheckedAt = now;
   applyKey(config.key, function (state) {
-    if (state !== keyStatus) { keyStatus = state; log('key: ' + state); }
+    if (state !== keyStatus) { setKeyStatus(state); log('key: ' + state); }
   });
 }
 
@@ -1134,7 +1158,7 @@ function handle(req, res) {
         try { saveConfig(); } catch (e) { return send(res, 500, { ok: false, error: e.message }); }
         if (!has(change, 'key')) return send(res, 200, { ok: true, config: publicConfig(), keyStatus: keyStatus });
         applyKey(config.key, function (state) {
-          keyStatus = state;
+          setKeyStatus(state, true);
           send(res, 200, { ok: true, config: publicConfig(), keyStatus: keyStatus });
         });
       });
@@ -1349,7 +1373,7 @@ function start() {
   (function firstRun(tries) {
     var go = function () {
       applyKey(config.key, function (state) {
-        keyStatus = state;
+        setKeyStatus(state);
         if (state === 'failed' && tries < 10) setTimeout(function () { firstRun(tries + 1); }, 15000);
       });
     };
@@ -1370,7 +1394,7 @@ function start() {
 
 module.exports = { DEVICES: DEVICES, DEFAULTS: DEFAULTS, CATALOG: CATALOG, webUrl: webUrl, newer: newer, readManifest: readManifest, verifyIpk: verifyIpk, validate: validate, jpegSize: jpegSize, pngSize: pngSize, isLocal: isLocal, hostOk: hostOk,
   applyKey: applyKey, iconFile: iconFile, pickBackground: pickBackground, appChoices: appChoices, openApps: openApps, fromHome: fromHome, keysOnTv: keysOnTv,
-  pinHash: pinHash, same: same };
+  pinHash: pinHash, same: same, recheckEvery: recheckEvery, recheckDue: recheckDue };
 
 if (require.main === module) {
   if (process.argv[2] === '--uninstall') {
