@@ -114,6 +114,8 @@ var DEFAULTS = {
   clockStyle: 'thin',
   clockSize: 'medium',
   clockSide: 'left',
+  // The clock in the weather city's time, for a TV set to the wrong time zone; off, it is the TV's.
+  cityTime: false,
   units: 'c',
   weather: null,
   tiles: null,
@@ -402,6 +404,7 @@ function validate(body, keyNames) {
     else if (k === 'clockSize') { if (CLOCK_SIZES.indexOf(v) === -1) return 'clockSize'; out[k] = v; }
     // The clock and weather on the left, as always, or on the right.
     else if (k === 'clockSide') { if (v !== 'left' && v !== 'right') return 'clockSide'; out[k] = v; }
+    else if (k === 'cityTime') { if (typeof v !== 'boolean') return 'cityTime'; out[k] = v; }
     else if (k === 'units') { if (v !== 'c' && v !== 'f') return 'units'; out[k] = v; }
     else if (k === 'tileStyle') { if (['text', 'logo', 'icon'].indexOf(v) === -1) return 'tileStyle'; out[k] = v; }
     // Names under logos and icons: all of them, the selected one's only, or none.
@@ -1147,6 +1150,11 @@ function handle(req, res) {
     return readJson(req, res, function (body) {
       var change = validate(body, keyNames());
       if (typeof change === 'string') return send(res, 400, { ok: false, error: 'invalid: ' + change });
+      // The clock in the city's time needs a weather city: refused without one, and off when the city goes.
+      if (has(change, 'weather') && change.weather === null) change.cityTime = false;
+      if (change.cityTime === true && !(has(change, 'weather') ? change.weather : config.weather)) {
+        return send(res, 400, { ok: false, error: 'the clock in the city\'s time needs a city for the weather' });
+      }
       movePort(change.port, function (err) {
         if (err) return send(res, 409, { ok: false, error: err });
         // A picture uploaded is chosen as such; one the app carries leaves the pictures in the list.

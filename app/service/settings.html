@@ -454,6 +454,10 @@ footer a { color: var(--muted); }
             <label><input type="radio" name="units" value="f"><span>°F</span></label>
           </div>
         </div>
+        <div class="row">
+          <label for="city-time"><span data-t="cityTime">Clock in the city's time</span><span class="sub" id="city-time-sub"></span></label>
+          <input type="checkbox" class="switch" id="city-time" role="switch">
+        </div>
         <div class="actions"><button class="btn" type="button" id="no-weather" data-t="noWeather">No weather</button></div>
         <p class="note"><span data-t="weatherBy">Weather by</span> <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a></p>
       </section>
@@ -578,6 +582,8 @@ footer a { color: var(--muted); }
       veil: 'Shade', veilLede: 'How dark the picture is behind the time and the tiles.', light: 'Light', dark: 'Dark',
       clockWeather: 'Clock and weather', clock: 'Clock', c24: '24-hour', c12: '12-hour', weatherFor: 'Weather for',
       search: 'Search for a city', searching: 'Searching…', noCity: 'No city by that name.', searchFail: 'The search did not answer. Try again.',
+      cityTime: 'Clock in the city\'s time', cityTimeLede: 'For a TV set to the wrong time zone: the clock shows the time in ',
+      cityTimeEnd: ', from the weather.', cityTimeNoCity: 'Choose a city for the weather first: the time comes with it.',
       units: 'Units', noWeather: 'No weather', weatherBy: 'Weather by', remote: 'Remote and power',
       key: 'Key that opens Lightkeeper', keyLede: 'Through GlassHouse. With Home, Back from the last app also comes here.',
       keyHome: 'Home', keyNone: 'None', active: 'Active.', pending: 'Active within a minute, once GlassHouse has restarted.',
@@ -696,7 +702,8 @@ footer a { color: var(--muted); }
   }
 
   function clockText() {
-    var d = new Date(), h = d.getHours(), m = (d.getMinutes() < 10 ? ':0' : ':') + d.getMinutes();
+    var w = cfg.weather, o = orario(Date.now(), cfg.cityTime === true && !!w, w ? offsetCitta(null, zonaCitta, w.lat + ',' + w.lon) : null);
+    var h = o.h, m = (o.m < 10 ? ':0' : ':') + o.m;
     return cfg.clock === '12' ? ((h + 11) % 12 + 1) + m + '<small>' + (h < 12 ? 'AM' : 'PM') + '</small>' : h + m;
   }
 
@@ -710,6 +717,9 @@ footer a { color: var(--muted); }
 
   function preview() {
     if (!cfg) return;
+    $('city-time').checked = !!cfg.cityTime && !!cfg.weather;
+    $('city-time').disabled = !cfg.weather;
+    $('city-time-sub').textContent = cfg.weather ? t.cityTimeLede + cfg.weather.name + t.cityTimeEnd : t.cityTimeNoCity;
     $('screen').style.backgroundImage = 'url(' + bgUrl() + ')';
     $('p-veil').style.opacity = $('veil').value / 100;
     $('p-ora').innerHTML = clockText();
@@ -773,7 +783,7 @@ footer a { color: var(--muted); }
     return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">' +
       METEO_ICONE[nome] + '</svg>';
   }
-  var meteoPer = null, meteoRiga = '';
+  var meteoPer = null, meteoRiga = '', zonaCitta = null; // the weather city's offset, as on the Home
   function meteo() {
     var w = cfg.weather, el = $('p-meteo'), per = w ? w.lat + ',' + w.lon + ',' + cfg.units : '';
     if (per === meteoPer) { el.innerHTML = meteoRiga; return; }
@@ -789,10 +799,12 @@ footer a { color: var(--muted); }
     x.onload = function () {
       if (per !== meteoPer) return;
       try {
-        var c = JSON.parse(x.responseText).current;
+        var j = JSON.parse(x.responseText), c = j.current;
         el.textContent = w.name + ' · ' + Math.round(c.temperature_2m) + '°';
         el.insertAdjacentHTML('beforeend', icona(c.weather_code, c.is_day));
         meteoRiga = el.innerHTML;
+        zonaCitta = { per: w.lat + ',' + w.lon, sec: offsetCitta(j, zonaCitta, w.lat + ',' + w.lon) };
+        if (cfg.cityTime) $('p-ora').innerHTML = clockText();
         allineaOra($('p-ora'), el, cfg);
       } catch (e) {}
     };
@@ -1621,6 +1633,7 @@ footer a { color: var(--muted); }
   $('power').onchange = function () { save({ openAtPowerOn: this.checked }); };
   $('open-apps').onchange = function () { save({ openApps: this.checked }); };
   $('hide-gear').onchange = function () { save({ hideGear: this.checked }); };
+  $('city-time').onchange = function () { save({ cityTime: this.checked }); };
   // On, the break where it was, else in the middle of the tiles; off, it is kept for the next time.
   $('two-rows').onchange = function () {
     var n = (cfg.tiles || []).length, k = cfg.rowBreak, change = { twoRows: this.checked };

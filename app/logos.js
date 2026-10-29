@@ -287,6 +287,27 @@ function inizioSeconda(c) {
   return c.twoRows === true && typeof k === 'number' && k % 1 === 0 && k > 0 && k < n ? k : 0;
 }
 
+// The clock's hours and minutes. The TV's own time; with the clock in the weather city's time
+// (cityTime) and that city's offset from UTC known, in seconds, UTC plus the offset: right on a TV
+// whose time zone is set wrong, as long as its UTC is right.
+function orario(ms, cityTime, offset) {
+  var d;
+  if (cityTime && typeof offset === 'number' && isFinite(offset)) {
+    d = new Date(ms + offset * 1000);
+    return { h: d.getUTCHours(), m: d.getUTCMinutes() };
+  }
+  d = new Date(ms);
+  return { h: d.getHours(), m: d.getMinutes() };
+}
+
+// The weather city's offset from UTC, in seconds: from Open-Meteo's answer (timezone=auto), or,
+// when the weather does not answer, the last one kept for the same city (per: "lat,lon"). null
+// without either, and the clock keeps the TV's time.
+function offsetCitta(risposta, salvato, per) {
+  if (risposta && typeof risposta.utc_offset_seconds === 'number') return risposta.utc_offset_seconds;
+  return salvato && salvato.per === per && typeof salvato.sec === 'number' ? salvato.sec : null;
+}
+
 // What a tile opens: a web page in the TV's browser, as the gear does; else the app or input.
 function apertura(tile, browser) {
   return tile.url ? { id: browser, params: { target: tile.url } } : { id: tile.id };

@@ -203,6 +203,9 @@ var seconda = 0;    // where the lower row starts with two rows; 0 with one
 var aperte = [];    // the apps open on the TV, as the server lists them
 var sel = 0;
 var meteoAlle = 0, meteoPer = '';
+// The weather city's offset from UTC, kept for the clock in the city's time: {per: "lat,lon", sec, tz}.
+var zonaCitta = null;
+try { zonaCitta = JSON.parse(localStorage.getItem('cityOffset')); } catch (e) {}
 var letto = false; // the server has answered since this page started
 
 function cached() {
@@ -644,17 +647,22 @@ function meteo() {
   x.timeout = 8000;
   x.onload = function () {
     try {
-      var c = JSON.parse(x.responseText).current;
+      var j = JSON.parse(x.responseText), c = j.current, per = w.lat + ',' + w.lon;
       meteoEl.textContent = w.name + ' · ' + Math.round(c.temperature_2m) + '°';
       meteoEl.insertAdjacentHTML('beforeend', icona(c.weather_code, c.is_day));
+      // Each answer brings the offset again, so a change of summer time comes with the next weather.
+      zonaCitta = { per: per, sec: offsetCitta(j, zonaCitta, per), tz: j.timezone };
+      try { localStorage.setItem('cityOffset', JSON.stringify(zonaCitta)); } catch (e) {}
       allineaOra(ora, meteoEl, cfg);
+      if (cfg.cityTime) aggiorna();
     } catch (e) {}
   };
   x.send();
 }
 
 function aggiorna() {
-  var d = new Date(), h = d.getHours(), m = (d.getMinutes() < 10 ? ':0' : ':') + d.getMinutes();
+  var w = cfg.weather, o = orario(Date.now(), cfg.cityTime === true && !!w, w ? offsetCitta(null, zonaCitta, w.lat + ',' + w.lon) : null);
+  var h = o.h, m = (o.m < 10 ? ':0' : ':') + o.m;
   if (cfg.clock === '12') ora.innerHTML = ((h + 11) % 12 + 1) + m + '<small>' + (h < 12 ? 'AM' : 'PM') + '</small>';
   else ora.textContent = h + m;
   allineaOra(ora, meteoEl, cfg);

@@ -54,6 +54,9 @@ assert.equal(s.DEFAULTS.openApps, false); // the Home looks as before until it i
 assert.equal(s.DEFAULTS.startTile, 'last'); assert.equal(s.DEFAULTS.hideGear, false);
 // The clock and weather on the left, as always, or on the right.
 assert.equal(s.DEFAULTS.clockSide, 'left');
+assert.equal(s.DEFAULTS.cityTime, false); // the clock is the TV's until turned on
+assert.deepEqual(s.validate({ cityTime: true }, keys), { cityTime: true });
+assert.equal(s.validate({ cityTime: 'yes' }, keys), 'cityTime');
 assert.deepEqual(s.validate({ clockSide: 'right' }, keys), { clockSide: 'right' });
 assert.deepEqual(s.validate({ clockSide: 'left' }, keys), { clockSide: 'left' });
 ['centre', 'Right', '', null, 1].forEach(function (v) { assert.equal(s.validate({ clockSide: v }, keys), 'clockSide', JSON.stringify(v)); });
@@ -419,6 +422,27 @@ var otto = [1, 2, 3, 4, 5, 6, 7, 8].map(function (n) { return { id: 'app' + n, t
 assert.equal(logos.inizioSeconda({ tiles: otto, twoRows: true, rowBreak: 3 }), 3);
 [null, 0, 8, 9, 2.5, '3'].forEach(function (k) { assert.equal(logos.inizioSeconda({ tiles: otto, twoRows: true, rowBreak: k }), 0, String(k)); });
 assert.equal(logos.inizioSeconda({ twoRows: true, rowBreak: 1 }), 0); // no tiles
+
+// The clock in the weather city's time. Off: the TV's own hours and minutes, whatever the offset.
+// On: UTC plus the city's offset, so a TV with a wrong time zone and a right UTC shows the city's time.
+var adesso = Date.UTC(2026, 9, 29, 18, 51), tv = new Date(adesso);
+assert.deepEqual(JSON.parse(JSON.stringify(logos.orario(adesso, false, 7200))), { h: tv.getHours(), m: tv.getMinutes() });
+assert.deepEqual(JSON.parse(JSON.stringify(logos.orario(adesso, true, 3600))), { h: 19, m: 51 });
+assert.deepEqual(JSON.parse(JSON.stringify(logos.orario(adesso, true, -18000))), { h: 13, m: 51 });
+assert.deepEqual(JSON.parse(JSON.stringify(logos.orario(adesso, true, null))), { h: tv.getHours(), m: tv.getMinutes() }); // no offset yet
+// The offset: from the weather's answer; when the weather fails, the last one kept for the same city; else none.
+var kept = { per: '45.08,9.3', sec: 3600 };
+assert.equal(logos.offsetCitta({ utc_offset_seconds: 7200, timezone: 'Europe/Rome' }, kept, '45.08,9.3'), 7200);
+assert.equal(logos.offsetCitta(null, kept, '45.08,9.3'), 3600);
+assert.equal(logos.offsetCitta({ error: true, reason: 'down' }, kept, '45.08,9.3'), 3600);
+assert.equal(logos.offsetCitta(null, kept, '51.5,-0.12'), null);
+assert.equal(logos.offsetCitta(null, null, '45.08,9.3'), null);
+// The Home and the settings' preview draw the clock through it, and keep the offset from each weather answer.
+[path.join('app', 'index.html'), path.join('app', 'service', 'settings.html')].forEach(function (f) {
+  var text = fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
+  assert.ok(/orario\(Date\.now\(\), cfg\.cityTime === true && !!w, /.test(text), f);
+  assert.ok(/offsetCitta\(j, zonaCitta, /.test(text), f);
+});
 // The clock: no class, so the Home's rule for it as it has always been, unless a style or size is chosen.
 assert.equal(logos.classeOra({}), '');
 assert.equal(logos.classeOra({ clockStyle: 'thin', clockSize: 'medium' }), '');
@@ -587,6 +611,13 @@ function httpChecks() {
         }, 400);
       });
     },
+    // The clock in the city's time: refused with no weather city, taken with one, off when the city goes.
+    function (next) { req('POST', '/api/config', json({ cityTime: true }), function (st, j) {
+      assert.equal(st, 400); assert.ok(/needs a city for the weather/.test(j.error), j.error); next(); }); },
+    function (next) { req('POST', '/api/config', json({ weather: { name: 'Stradella', lat: 45.08, lon: 9.3 }, cityTime: true }), function (st, j) {
+      assert.equal(st, 200); assert.equal(j.config.cityTime, true); next(); }); },
+    function (next) { req('POST', '/api/config', json({ weather: null }), function (st, j) {
+      assert.equal(st, 200); assert.equal(j.config.weather, null); assert.equal(j.config.cityTime, false); next(); }); },
     function (next) { req('GET', '/api/tv', {}, function (st, j) {
       assert.equal(st, 200);
       assert.deepEqual(j.inputs.map(function (i) { return i.title; }), ['HDMI 1', 'HDMI 2', 'Game console', 'Live TV']);
