@@ -716,6 +716,7 @@ function checkInput(tries) {
     if (listed === null && tries < 10) return setTimeout(function () { checkInput(tries + 1); }, 15000);
     if (listed !== false) return;
     applyInput(true, function (state) {
+      log('input: not in the TV\'s list at start, added again: ' + state);
       if (setInputStatus(state)) return;
       config.tvInput = false;
       try { saveConfig(); } catch (e) { log('config: ' + e.message); }
