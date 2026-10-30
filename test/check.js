@@ -381,6 +381,28 @@ assert.equal(logos.logoDi({ id: 'com.webos.app.hdmi1', title: 'Box', device: 'fi
 assert.equal(logos.logoDi({ id: 'com.webos.app.hdmi1', title: 'HDMI 1', device: 'roku' }, 'logo'), 'roku');
 assert.equal(logos.logoDi({ id: 'com.webos.app.hdmi2', title: 'Wii' }, 'logo'), 'wii');
 assert.deepEqual([logos.SIMPLE_ICONS_NOMI.roku, logos.IMMAGINI_NOMI.wii], ['Roku', 'Wii']);
+// Older consoles, as asked on Reddit. The first rule that matches wins, so each one must come before any
+// other that takes its name too: PS2 and PS3 lead to neither the PS4 nor the PS5, nor those to them;
+// Wii U not to the Wii, GameCube, N64, SNES and NES not to the Switch, Super Nintendo not to NES.
+[['PS3', 'ps3'], ['PlayStation 3', 'ps3'], ['PS 2', 'ps2'], ['PlayStation2', 'ps2'], ['PS1', 'ps1'], ['PSone', 'ps1'],
+ ['PlayStation 1', 'ps1'], ['PS5', 'ps5'], ['PlayStation 5', 'ps5'], ['PS4 Pro', 'ps4'], ['PlayStation 4', 'ps4'],
+ ['PlayStation', 'console'], ['Apps 2', 'hdmi'], ['Xbox 360', 'xbox360'], ['XBOX360 S', 'xbox360'], ['Xbox Series S', 'xboxseries'],
+ ['Wii U', 'wiiu'], ['WiiU', 'wiiu'], ['Wii', 'wii'], ['Nintendo GameCube', 'gamecube'], ['Game Cube', 'gamecube'],
+ ['N64', 'n64'], ['Nintendo 64', 'n64'], ['SNES Mini', 'snes'], ['Super Nintendo', 'snes'], ['Super Famicom', 'snes'],
+ ['NES', 'nes'], ['Famicom', 'nes'], ['Nintendo Entertainment System', 'nes'], ['Nintendo Switch', 'switch'],
+ ['Dreamcast', 'dreamcast'], ['Sega Saturn', 'saturn'], ['Mega Drive', 'megadrive'], ['MegaDrive Mini', 'megadrive'],
+ ['Sega Genesis', 'genesis'], ['Atari 2600+', 'atari']
+].forEach(function (c) { assert.equal(logos.indovinaApparecchio(c[0]), c[1], c[0]); });
+// Every device, by the name the settings give it, leads to itself, but the four that are not one brand.
+logos.APPARECCHI.forEach(function (a) {
+  if (['console', 'player', 'tv', 'hdmi'].indexOf(a.id) === -1) assert.equal(logos.indovinaApparecchio(a.nome), a.id, a.nome);
+});
+assert.equal(logos.logoDi({ id: 'com.webos.app.hdmi1', title: 'PS2' }, 'logo'), 'playstation2');
+assert.equal(logos.logoDi({ id: 'com.webos.app.hdmi2', title: 'HDMI 2', device: 'dreamcast' }, 'icon'), 'dreamcast');
+assert.deepEqual([logos.SIMPLE_ICONS_NOMI.playstation2, logos.SIMPLE_ICONS_NOMI.playstation3, logos.IMMAGINI_NOMI.wiiu,
+  logos.IMMAGINI_NOMI.dreamcast], ['PlayStation 2', 'PlayStation 3', 'Wii U', 'Dreamcast']);
+['wiiu', 'gamecube', 'nintendo64', 'snes', 'nes', 'dreamcast', 'segasaturn', 'megadrive', 'genesis', 'xbox360']
+  .forEach(function (n) { assert.ok(logos.IMMAGINI[n][1] >= 240, n + ' at least 240 pixels tall'); });
 assert.equal(logos.logoDi({ id: 'com.webos.app.hdmi2', title: 'Xbox Series X' }, 'logo'), 'xbox');
 // Every logo picture is in app/logos/ at the size the table gives; every Commons file listed has its
 // picture; every title leads to a drawing; arte, by the title its app has, gets its logo (October 2026).
