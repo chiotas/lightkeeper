@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.11 (30 October 2026)
+
+- **The Home shows again on webOS 3.** With 1.0.10 it stayed black, as reported on Reddit from a TV with webOS 3.4. A line added in 1.0.10, which places the two rows again once the typeface is loaded, takes `document.fonts.ready` for a promise; in an engine where it is still a method, as in an early draft of the standard, that throws, and the Home stopped before drawing a tile or the picture. In a computer's browser made to have `ready` as a method, 1.0.10 stays black with that error and 1.0.11 draws the Home; with `ready` as a promise, as on newer TVs, nothing changes. Not yet tried on a webOS 3 TV.
+
 ## 1.0.10 (30 October 2026)
 
 - **Less work for the TV at each press of an arrow.** On an LG C1 with webOS 6.5.3, measured on the TV with Chrome's own counters and traces, a press on the Home cost WebAppMgr, the TV's web engine, about 360 ms of processor time with 8 logos and 420 with 50, most of it drawing. The shadow under each logo was blurred again at every frame while a chosen tile grew, and each fade gave tiles a layer and took it back, so the row and the picture behind it were painted again. The shadow now sits on the logo itself, and each tile keeps a layer of its own. A press now costs 209 ms with 8 logos and 271 with 50, with names 170 and 203 instead of 194 and 230, and with app icons 184 and 233 instead of 258 and 292, the median of three runs each. With 8 logos the GPU's thread does 57 ms of work per press instead of 144, and the Home draws 7.8 frames for each press instead of 6.6. At rest and switching apps cost the same as in 1.0.9 or less, the Home comes up on screen as fast, and WebAppMgr as a whole uses less memory. Next to 1.0.9, screenshots of the Home with logos differ by one level out of 255 in about 21,000 pixels at rest, and by two to six levels in under a hundred. Prompted by [#12](https://github.com/chiotas/lightkeeper/issues/12).

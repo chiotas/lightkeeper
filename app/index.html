@@ -174,7 +174,7 @@ body.pannello .freccia { visibility: hidden; }
 <div id="aperte" hidden><h2></h2><div class="righe"><ul></ul></div><p></p></div>
 <script src="logos.js"></script>
 <script>
-var APP_VERSION = '1.0.10';
+var APP_VERSION = '1.0.11';
 var LG_HOME = 'com.webos.app.home';
 var BROWSER = 'com.webos.app.browser';
 var EXEC = 'luna://org.webosbrew.hbchannel.service/exec';
@@ -257,7 +257,12 @@ function posiziona() {
   navSopra.style.bottom = seconda ? 104 + nav.offsetHeight + (testo ? 80 : 48) + 'px' : '';
   frSx2.style.bottom = frDx2.style.bottom = navSopra.style.bottom;
 }
-if (document.fonts && document.fonts.ready) document.fonts.ready.then(function () { posiziona(); });
+// In an engine where ready is still a method, as in an early draft of the standard, .then on it
+// throws: in 1.0.10 the page stopped here, before drawing a tile, and webOS 3.4 showed a black Home.
+try {
+  var fonti = typeof document.fonts.ready === 'function' ? document.fonts.ready() : document.fonts.ready;
+  fonti.then(function () { posiziona(); });
+} catch (e) {}
 function seleziona(i, colPuntatore) {
   sel = Math.max(0, Math.min(voci.length - 1, i));
   posiziona();
