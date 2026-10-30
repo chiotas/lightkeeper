@@ -84,10 +84,12 @@ nav.icons a.sel img { -webkit-transform: scale(1.06); transform: scale(1.06); }
 /* A logo, white like the words: no frame, as the brands ask, a shadow to read over the picture. */
 nav.icons .logo {
   display: flex; align-items: center; justify-content: center; height: 132px; margin-bottom: 20px;
-  -webkit-filter: drop-shadow(0 2px 14px rgba(0, 0, 0, .5)); filter: drop-shadow(0 2px 14px rgba(0, 0, 0, .5));
   transition: transform .2s;
 }
-nav.icons .logo svg, nav.icons .logo img { display: block; }
+/* The shadow on the logo itself, not on the box that grows when chosen: drawn once, not at each frame. */
+nav.icons .logo svg, nav.icons .logo img {
+  display: block; -webkit-filter: drop-shadow(0 2px 14px rgba(0, 0, 0, .5)); filter: drop-shadow(0 2px 14px rgba(0, 0, 0, .5));
+}
 nav.icons .logo img, nav.icons a.sel .logo img { margin: 0; border-radius: 0; box-shadow: none; -webkit-transform: none; transform: none; }
 nav.icons a.sel .logo { -webkit-transform: scale(1.06); transform: scale(1.06); }
 /* A logo chosen for a tile, among app icons: on a dark tile of the icons' size. */
