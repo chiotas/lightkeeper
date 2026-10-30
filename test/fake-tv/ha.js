@@ -2,7 +2,8 @@
  * A stand-in Home Assistant, for test/check.js and local previews: the REST calls
  * Lightkeeper makes, with the token checked as HA checks it.
  *
- *   node test/fake-tv/ha.js [port] [token]   http://127.0.0.1:8123, token "fake-token-for-lightkeeper"
+ *   node test/fake-tv/ha.js [port] [token] [host]   http://127.0.0.1:8123, token "fake-token-for-lightkeeper";
+ *                                                   host 0.0.0.0 for a TV on the network
  *
  * From check.js: require('./fake-tv/ha.js')(port, token, tls) gives the server, with
  * .states to change, .calls made to it, and .hang to stop answering.
@@ -11,7 +12,7 @@
 var http = require('http');
 var https = require('https');
 
-module.exports = function (port, token, tls) {
+module.exports = function (port, token, tls, host) {
   var states = {
     'sensor.patio': { state: '21.5', attributes: { unit_of_measurement: '°C', friendly_name: 'Patio' } },
     'light.sala': { state: 'off', attributes: { friendly_name: 'Luce sala' } },
@@ -52,12 +53,12 @@ module.exports = function (port, token, tls) {
   server.states = states;
   server.calls = [];
   server.hang = false;
-  server.listen(port, '127.0.0.1');
+  server.listen(port, host || '127.0.0.1');
   return server;
 };
 
 if (require.main === module) {
   var port = +process.argv[2] || 8123;
-  module.exports(port, process.argv[3] || 'fake-token-for-lightkeeper');
-  console.log('fake Home Assistant on http://127.0.0.1:' + port);
+  module.exports(port, process.argv[3] || 'fake-token-for-lightkeeper', null, process.argv[4]);
+  console.log('fake Home Assistant on http://' + (process.argv[4] || '127.0.0.1') + ':' + port);
 }
