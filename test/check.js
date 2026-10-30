@@ -847,7 +847,7 @@ function httpChecks() {
     if (i === steps.length) {
       child.removeAllListeners('exit');
       child.kill();
-      return portChecks(function () { updateChecks(function () { migrationChecks(function () { console.log('check: all good'); }); }); });
+      return portChecks(function () { updateChecks(function () { migrationChecks(function () { haChecks(function () { console.log('check: all good'); }); }); }); });
     }
     steps[i](function () { run(i + 1); });
   }
@@ -1012,4 +1012,158 @@ function migrationChecks(done) {
       });
     });
   }, 700);
+}
+
+// Home Assistant, against the stand-in in fake-tv/ha.js. Off, nothing is asked of it. A wrong
+// token, or an address that does not answer, is not kept. The token never comes back to a page,
+// nor goes into the config, the log or curl's command line, and a new address needs it again.
+// The Home's values and presses answer the Home only, and press only what a tile has. An HA that
+// does not answer gives no values, in time. Off again, its entities and tiles go.
+function haChecks(done) {
+  var server = path.join(__dirname, '..', 'app', 'service', 'server.js');
+  var TOKEN = 'eyJhbGciOiJIUzI1NiJ9.the-check-s-own.Zm9vYmFy';
+  var data = path.join(tmp, 'data-ha'), tokenFile = path.join(data, 'ha-token');
+  fs.mkdirSync(data);
+  // https: a certificate of the moment, and curl trusting it, which writes down how it was run.
+  var cp = require('child_process'), cert = path.join(tmp, 'ha-cert.pem'), key = path.join(tmp, 'ha-key.pem');
+  cp.execFileSync('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-keyout', key, '-out', cert, '-days', '1',
+    '-subj', '/CN=127.0.0.1', '-addext', 'subjectAltName=IP:127.0.0.1'], { stdio: 'ignore' });
+  var curlArgs = path.join(tmp, 'curl-args'), curl = path.join(tmp, 'curl-ha');
+  fs.writeFileSync(curl, '#!/bin/sh\necho "$@" >> ' + curlArgs + '\nexec /usr/bin/curl --cacert ' + cert + ' "$@"\n', { mode: 493 });
+  var ha = require('./fake-tv/ha.js')(18623, TOKEN);
+  var has = require('./fake-tv/ha.js')(18643, TOKEN, { key: fs.readFileSync(key), cert: fs.readFileSync(cert) });
+  var henv = {};
+  Object.keys(process.env).forEach(function (k) { henv[k] = process.env[k]; });
+  henv.LIGHTKEEPER_PORT = '18590';
+  henv.LIGHTKEEPER_DATA = data;
+  henv.LIGHTKEEPER_PORT_FILE = path.join(tmp, 'port-5');
+  henv.LIGHTKEEPER_CURL = curl;
+  var child = spawn(process.execPath, [server], { env: henv, stdio: ['ignore', 'pipe', 'inherit'] });
+  var logged = '';
+  child.stdout.on('data', function (d) { logged += d; });
+  child.on('exit', function (code) { if (code) { console.error('home assistant server exited ' + code); process.exit(1); } });
+  function post(body, origin) {
+    var h = { 'Content-Type': 'application/json' };
+    if (origin) h.Origin = origin;
+    return { port: 18590, headers: h, body: JSON.stringify(body) };
+  }
+  var home = { port: 18590, headers: { Origin: 'null' } };
+  function press(id, origin, type) {
+    return { port: 18590, headers: { Origin: origin || 'null', 'Content-Type': type || 'application/json' }, body: JSON.stringify({ id: id }) };
+  }
+  var LOCAL = 'http://127.0.0.1:18623';
+  var steps = [
+    function (next) { req('GET', '/api/ha/states', home, function (st, j, h) {
+      assert.equal(st, 200); assert.deepEqual(j.states, {}); assert.equal(h['access-control-allow-origin'], 'null');
+      req('GET', '/api/config', { port: 18590 }, function (st2, j2) {
+        assert.equal(j2.haUrl, null); assert.deepEqual(j2.haShow, []); assert.equal(ha.calls.length, 0, 'off, HA is not asked'); next();
+      }); }); },
+    function (next) { req('POST', '/api/ha', post({ url: LOCAL, token: 'a-wrong-token-of-the-right-shape' }), function (st, j) {
+      assert.equal(st, 502); assert.equal(j.error, 'token'); assert.ok(!fs.existsSync(tokenFile)); next(); }); },
+    function (next) { req('POST', '/api/ha', post({ url: 'http://127.0.0.1:18199', token: TOKEN }), function (st, j) {
+      assert.equal(st, 502); assert.equal(j.error, 'no answer'); assert.ok(!fs.existsSync(tokenFile)); next(); }); },
+    function (next) { req('POST', '/api/ha', post({ url: 'ftp://127.0.0.1:18123', token: TOKEN }), function (st, j) {
+      assert.equal(st, 400); assert.equal(j.error, 'address'); next(); }); },
+    function (next) { req('POST', '/api/ha', post({ url: LOCAL, token: TOKEN + '"\nurl = "http://evil.example/' }), function (st, j) {
+      assert.equal(st, 400); assert.equal(j.error, 'token'); next(); }); },
+    // A page elsewhere cannot set it: the settings' writes are this host's only.
+    function (next) { req('POST', '/api/ha', post({ url: LOCAL, token: TOKEN }, 'http://evil.example'), function (st) {
+      assert.equal(st, 415); assert.ok(!fs.existsSync(tokenFile)); next(); }); },
+    function (next) { req('POST', '/api/ha', post({ url: LOCAL + '/', token: TOKEN }), function (st, j, h, raw) {
+      assert.equal(st, 200); assert.equal(j.config.haUrl, LOCAL);
+      assert.equal(fs.readFileSync(tokenFile, 'utf8').trim(), TOKEN);
+      assert.equal(fs.statSync(tokenFile).mode & 511, 384, 'the token file is the server\'s only');
+      assert.equal(String(raw).indexOf(TOKEN), -1);
+      assert.equal(fs.readFileSync(path.join(data, 'config.json'), 'utf8').indexOf(TOKEN), -1, 'not in the config');
+      assert.equal(ha.calls[ha.calls.length - 1].auth, 'Bearer ' + TOKEN); next(); }); },
+    // A new address needs the token again: the kept one is never sent anywhere else.
+    function (next) { req('POST', '/api/ha', post({ url: 'http://127.0.0.1:18124' }), function (st, j) {
+      assert.equal(st, 400); assert.equal(j.error, 'token needed');
+      req('POST', '/api/ha', post({ url: LOCAL }), function (st2, j2) { assert.equal(st2, 200); assert.equal(j2.config.haUrl, LOCAL); next(); }); }); },
+    function (next) { req('GET', '/api/ha/entities', { port: 18590 }, function (st, j, h, raw) {
+      assert.equal(st, 200); assert.equal(String(raw).indexOf(TOKEN), -1);
+      var sala = j.entities.filter(function (e) { return e.id === 'light.sala'; })[0];
+      assert.deepEqual(sala, { s: 'off', u: '', n: 'Luce sala', id: 'light.sala' }); next(); }); },
+    function (next) { req('POST', '/api/ha', post({ show: [1, 2, 3, 4, 5].map(function () { return { id: 'sensor.patio' }; }) }), function (st, j) {
+      assert.equal(st, 400); assert.equal(j.error, 'invalid: show'); next(); }); },
+    function (next) { req('POST', '/api/ha', post({ show: [{ id: 'sensor.patio', name: 'Patio' }, { id: 'binary_sensor.porta', name: '' }] }), function (st, j) {
+      assert.equal(st, 200); assert.deepEqual(j.config.haShow, [{ id: 'sensor.patio', name: 'Patio' }, { id: 'binary_sensor.porta', name: '' }]); next(); }); },
+    function (next) { req('POST', '/api/config', post({ tiles: [{ id: 'netflix', title: 'Netflix' }, { id: 'ha.light.sala', title: 'Sala' }, { id: 'ha.scene.sera', title: 'Sera' }] }), function (st) {
+      assert.equal(st, 200); next(); }); },
+    function (next) { req('GET', '/api/ha/states', home, function (st, j) {
+      assert.equal(st, 200);
+      assert.deepEqual(j.states['sensor.patio'], { s: '21.5', u: '°C', n: 'Patio' });
+      assert.equal(j.states['light.sala'].s, 'off'); assert.equal(j.states['binary_sensor.porta'].s, 'unavailable'); assert.ok(j.states['scene.sera']);
+      assert.equal(j.states['switch.presa'], undefined, 'only what the Home shows'); next(); }); },
+    // Origins: the Home's file:// page, or a page on the TV's own servers; nothing else.
+    function (next) { req('GET', '/api/ha/states', { port: 18590, headers: { Origin: 'http://evil.example' } }, function (st) {
+      assert.equal(st, 403);
+      req('POST', '/api/ha/press', press('light.sala', 'http://evil.example'), function (st2) {
+        assert.equal(st2, 403);
+        req('OPTIONS', '/api/ha/press', { port: 18590, headers: { Origin: 'http://evil.example' } }, function (st3) {
+          assert.equal(st3, 403);
+          req('OPTIONS', '/api/ha/press', { port: 18590, headers: { Origin: 'null' } }, function (st4, j4, h4) {
+            assert.equal(st4, 204); assert.equal(h4['access-control-allow-methods'], 'POST');
+            req('POST', '/api/ha/press', press('light.sala', 'null', 'text/plain'), function (st5) {
+              assert.equal(st5, 415);
+              assert.equal(ha.states['light.sala'].state, 'off', 'nothing pressed');
+              assert.ok(/home assistant refused: [^\n]*origin http:\/\/evil\.example/.test(logged), 'refusals are logged'); next();
+            });
+          });
+        });
+      }); }); },
+    function (next) { req('POST', '/api/ha/press', press('light.sala'), function (st, j) {
+      assert.equal(st, 200); assert.equal(j.states['light.sala'].s, 'on');
+      var c = ha.calls.filter(function (x) { return x.method === 'POST'; }).pop();
+      assert.equal(c.url, '/api/services/light/toggle'); assert.deepEqual(JSON.parse(c.body), { entity_id: 'light.sala' });
+      req('POST', '/api/ha/press', press('scene.sera'), function (st2) {
+        assert.equal(st2, 200);
+        assert.equal(ha.calls.filter(function (x) { return x.method === 'POST'; }).pop().url, '/api/services/scene/turn_on'); next();
+      }); }); },
+    // Only an entity a tile switches: not one beside the clock, not any other.
+    function (next) { req('POST', '/api/ha/press', press('switch.presa'), function (st) {
+      assert.equal(st, 400);
+      req('POST', '/api/ha/press', press('sensor.patio'), function (st2) { assert.equal(st2, 400); assert.equal(ha.states['switch.presa'].state, 'on'); next(); }); }); },
+    // https, through curl: the token on its standard input only.
+    function (next) { req('POST', '/api/ha', post({ url: 'https://127.0.0.1:18643', token: TOKEN }), function (st, j) {
+      assert.equal(st, 200, JSON.stringify(j));
+      req('POST', '/api/ha/press', press('light.sala'), function (st2, j2) {
+        assert.equal(st2, 200); assert.equal(j2.states['light.sala'].s, 'on'); assert.equal(j2.states['sensor.patio'].u, '°C');
+        assert.equal(has.calls.filter(function (x) { return x.method === 'POST'; }).pop().auth, 'Bearer ' + TOKEN);
+        var args = fs.readFileSync(curlArgs, 'utf8');
+        assert.ok(/-K -/.test(args)); assert.equal(args.indexOf(TOKEN), -1, 'not on curl\'s command line');
+        req('POST', '/api/ha', post({ url: LOCAL, token: TOKEN }), function (st3) { assert.equal(st3, 200); next(); });
+      }); }); },
+    // An HA that connects and does not answer: no values, in HA_TIMEOUT, not later.
+    function (next) {
+      ha.hang = true;
+      var t0 = Date.now();
+      req('GET', '/api/ha/states', home, function (st, j) {
+        var ms = Date.now() - t0;
+        assert.equal(st, 200); assert.deepEqual(j.states, {}); assert.ok(ms >= 3900 && ms < 6000, ms + ' ms');
+        assert.ok(/home assistant: no answer/.test(logged)); ha.hang = false; next();
+      });
+    },
+    // An HA that is off: no values, at once.
+    function (next) {
+      ha.close();
+      var t0 = Date.now();
+      req('GET', '/api/ha/states', home, function (st, j) {
+        assert.equal(st, 200); assert.deepEqual(j.states, {}); assert.ok(Date.now() - t0 < 1000);
+        req('POST', '/api/ha/press', press('light.sala'), function (st2, j2) { assert.equal(st2, 502); assert.equal(j2.error, 'no answer'); next(); });
+      });
+    },
+    function (next) { req('POST', '/api/ha', post({ url: null }), function (st, j) {
+      assert.equal(st, 200); assert.equal(j.config.haUrl, null); assert.deepEqual(j.config.haShow, []);
+      assert.deepEqual(j.config.tiles, [{ id: 'netflix', title: 'Netflix' }]); assert.ok(!fs.existsSync(tokenFile));
+      assert.equal(logged.indexOf(TOKEN), -1, 'not in the log'); next(); }); }
+  ];
+  function run(i) {
+    if (i < steps.length) return steps[i](function () { run(i + 1); });
+    child.removeAllListeners('exit');
+    child.kill();
+    has.close();
+    done();
+  }
+  setTimeout(function () { run(0); }, 700); // a moment to start listening
 }

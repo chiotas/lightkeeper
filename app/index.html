@@ -162,6 +162,11 @@ body.pannello .freccia { visibility: hidden; }
   white-space: nowrap;
 }
 #hint.on { opacity: .8; }
+/* Home Assistant: its values under the weather; a tile's on or off after its name, or its icon dimmed when off. */
+#casa { margin-top: 14px; font-size: 34px; font-weight: 300; opacity: .9; }
+#casa span { white-space: nowrap; }
+nav a b.stato { font-size: 32px; font-weight: 300; margin-left: 12px; }
+nav a[data-spenta] svg { opacity: .4; }
 </style>
 </head>
 <body>
@@ -289,6 +294,7 @@ function seleziona(i, colPuntatore) {
 function lancia(i) {
   if (voci[i].aperte) return apriPannello();
   if (voci[i].gear) return apri(BROWSER, { target: server() + '/' });
+  if (entitaCasa(voci[i])) return premi(voci[i]);
   try { localStorage.setItem('ultimaId', voci[i].id); localStorage.setItem('ultima', String(i)); } catch (e) {}
   var a = apertura(voci[i], BROWSER);
   apri(a.id, a.params);
@@ -309,7 +315,7 @@ function iconaTv(url) {
 function riempi(box, v, modo) {
   return function () {
     var logo = logoDi(v, modo);
-    if (logo && modo === 'icon' && v.logo) return box.parentNode.replaceChild(riquadro(logo), box);
+    if (logo && modo === 'icon' && (v.logo || entitaCasa(v))) return box.parentNode.replaceChild(riquadro(logo), box);
     if (logo) return box.appendChild(disegnaLogo(logo, 80, 176, 96));
     var url = server() + '/icon?id=' + encodeURIComponent(v.id) + '&s=' + (cfg.started || 0);
     if (modo !== 'logo') return box.parentNode.replaceChild(iconaTv(url), box);
@@ -419,6 +425,8 @@ function disegna() {
   else sfondo(url);
   seleziona(iniziale());
   aggiorna();
+  mettiCasa();
+  chiediCasa();
 }
 
 document.addEventListener('keydown', function (e) {
@@ -677,6 +685,94 @@ function aggiorna() {
   var per = cfg.weather ? cfg.weather.lat + ',' + cfg.weather.lon + ',' + cfg.units : '';
   if (per !== meteoPer || Date.now() - meteoAlle > 15 * 60000) meteo();
 }
+
+/*
+ * Home Assistant, when it is set in the settings: values under the weather, and tiles that
+ * switch a light or a switch, or run a scene or a script. The server asks HA; the Home asks
+ * the server, every ten seconds while it shows, and only when it has something of HA's to
+ * show. Names come at once, values as they come, and a dash while HA does not answer.
+ */
+var stati = {}, statiJ = '{}'; // by entity: {s: state, u: unit, n: name}, the server's last answer
+var casaEl = null, casaTesto = '', casaGiro = null, premuta = false;
+var VIRGOLA = (1.5).toLocaleString().indexOf(',') !== -1;
+
+// Lights, switches and input_booleans are on or off; a scene or a script has nothing to show.
+function acceso(id) { return /^(light|switch|input_boolean)\./.test(id); }
+function usaCasa() {
+  if ((cfg.haShow || []).length) return true;
+  for (var k = 0; k < (cfg.tiles || []).length; k++) if (entitaCasa(cfg.tiles[k])) return true;
+  return false;
+}
+
+function mettiCasa() {
+  var show = cfg.haShow || [], parti = [];
+  for (var k = 0; k < show.length; k++) parti.push((show[k].name || (stati[show[k].id] || {}).n || show[k].id) + ' ' + valoreCasa(stati[show[k].id], VIRGOLA));
+  if (parti.join('|') !== casaTesto) {
+    casaTesto = parti.join('|');
+    if (casaEl && !parti.length) { casaEl.parentNode.removeChild(casaEl); casaEl = null; }
+    if (parti.length) {
+      if (!casaEl) { casaEl = document.createElement('div'); casaEl.id = 'casa'; document.getElementById('testa').appendChild(casaEl); }
+      casaEl.innerHTML = '';
+      parti.forEach(function (p, i) {
+        if (i) casaEl.appendChild(document.createTextNode(' \u00b7 '));
+        var el = document.createElement('span');
+        el.textContent = p;
+        casaEl.appendChild(el);
+      });
+    }
+  }
+  for (var i = 0; i < voci.length; i++) if (entitaCasa(voci[i])) statoVoce(tessere[i], entitaCasa(voci[i]));
+  if (usaCasa() && !casaGiro) casaGiro = setInterval(function () { if (!document.hidden) chiediCasa(); }, 10000);
+  if (!usaCasa() && casaGiro) { clearInterval(casaGiro); casaGiro = null; }
+}
+
+// On or off after the name; with logos and icons, the icon dimmed when off.
+function statoVoce(a, id) {
+  var e = stati[id], spenta = acceso(id) && !(e && e.s === 'on');
+  if (spenta !== a.hasAttribute('data-spenta')) { if (spenta) a.setAttribute('data-spenta', ''); else a.removeAttribute('data-spenta'); }
+  if (!acceso(id) || cfg.tileStyle === 'logo' || cfg.tileStyle === 'icon') return;
+  var b = a.getElementsByTagName('b')[0], t = e && (e.s === 'on' || e.s === 'off') ? e.s : '\u2014';
+  if (!b) { b = document.createElement('b'); b.className = 'stato'; a.appendChild(b); }
+  if (b.textContent !== t) b.textContent = t;
+}
+
+function chiediCasa() {
+  if (!usaCasa()) return;
+  var x = new XMLHttpRequest();
+  x.open('GET', server() + '/api/ha/states');
+  x.timeout = 8000;
+  x.onload = x.onerror = x.ontimeout = function () { mettiStati(x); };
+  x.send();
+}
+
+// Drawn again only when something changed.
+function mettiStati(x) {
+  var r = null;
+  try { r = JSON.parse(x.responseText); } catch (e) {}
+  var j = JSON.stringify((r && r.states) || {});
+  if (j === statiJ) return;
+  statiJ = j;
+  stati = JSON.parse(j);
+  mettiCasa();
+}
+
+// OK on a tile: the server asks HA, and answers with the values after it.
+function premi(v) {
+  if (premuta) return;
+  premuta = true;
+  var x = new XMLHttpRequest();
+  x.open('POST', server() + '/api/ha/press');
+  x.setRequestHeader('Content-Type', 'application/json');
+  x.timeout = 10000;
+  x.onload = x.onerror = x.ontimeout = function () {
+    premuta = false;
+    mettiStati(x);
+    setTimeout(chiediCasa, 1500); // a light may take a moment to say it changed
+  };
+  x.send(JSON.stringify({ id: entitaCasa(v) }));
+}
+
+document.addEventListener('visibilitychange', function () { if (!document.hidden) chiediCasa(); });
 
 /*
  * The config comes from the server on this TV, and is kept here so the Home

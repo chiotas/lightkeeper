@@ -315,6 +315,11 @@ footer a { color: var(--muted); }
   .btn + .btn { margin-left: 6px; }
 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+/* Home Assistant: its values under the weather in the preview, as on the Home; the entities shown, as the tiles. */
+.screen .casa { margin-top: 14px; font-size: 34px; font-weight: 300; opacity: .9; }
+.screen .casa span { white-space: nowrap; }
+#ha-on .label { display: block; margin-top: 22px; }
+#ha-show { margin-top: 10px; }
 </style>
 </head>
 <body>
@@ -460,6 +465,26 @@ footer a { color: var(--muted); }
         </div>
         <div class="actions"><button class="btn" type="button" id="no-weather" data-t="noWeather">No weather</button></div>
         <p class="note"><span data-t="weatherBy">Weather by</span> <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a></p>
+      </section>
+
+      <section aria-labelledby="h-ha">
+        <h2 id="h-ha">Home Assistant</h2>
+        <p class="lede" data-t="haLede">Values from Home Assistant under the weather, and tiles that switch a light or a switch, or run a scene or a script. Off until it is connected.</p>
+        <div class="add-web">
+          <input type="url" id="ha-url" maxlength="300" placeholder="http://192.168.1.10:8123" aria-label="Address of Home Assistant">
+          <input type="password" id="ha-token" autocomplete="off" spellcheck="false" placeholder="Long-lived access token" aria-label="Access token">
+          <button class="btn" type="button" id="ha-connect" data-t="haConnect">Connect</button>
+        </div>
+        <p class="note" id="ha-note" aria-live="polite" hidden></p>
+        <p class="note" data-t="haTokenLede">Make the token in Home Assistant, under your profile, Security. A user of its own for the TV, not an administrator, is safer. The token stays on the TV.</p>
+        <div id="ha-on" hidden>
+          <span class="label" data-t="haShowTitle">Under the weather</span>
+          <ul class="tiles" id="ha-show"></ul>
+          <div class="add"><select id="ha-add-show"></select></div>
+          <div class="add"><select id="ha-add-tile"></select></div>
+          <p class="note" data-t="haTileLede">A tile goes at the end of the row, and moves like the others. OK switches its light or switch, or runs its scene or script.</p>
+          <div class="actions"><button class="btn danger" type="button" id="ha-off" data-t="haOff">Disconnect</button></div>
+        </div>
       </section>
 
       <section aria-labelledby="h-remote">
@@ -728,6 +753,7 @@ footer a { color: var(--muted); }
     var seconda = inizioSeconda(cfg), testo = cfg.tileStyle !== 'logo' && cfg.tileStyle !== 'icon';
     $('p-veil').className = 'veil' + (cfg.clockSide === 'right' ? ' dx' : '') + (seconda ? ' due' + (testo ? ' nomi' : '') : '');
     meteo();
+    haPreview();
     allineaOra($('p-ora'), $('p-meteo'), cfg);
     var nav = $('p-nav'), nav2 = $('p-nav2'), modo = cfg.tileStyle === 'logo' || cfg.tileStyle === 'icon' ? cfg.tileStyle : 'text';
     nav.className = modo === 'text' ? '' : 'icons' + (cfg.labels === 'none' ? ' bare' : cfg.labels === 'selected' ? ' only-sel' : '');
@@ -738,7 +764,7 @@ footer a { color: var(--muted); }
       var s = document.createElement('span');
       if (i === 0) s.className = 'sel';
       var logo = modo === 'text' ? '' : logoDi(tile, modo);
-      if (logo && modo === 'icon' && tile.logo) {
+      if (logo && modo === 'icon' && (tile.logo || entitaCasa(tile))) {
         s.appendChild(riquadro(logo));
       } else if (logo) {
         var box = document.createElement('div');
@@ -1214,6 +1240,12 @@ footer a { color: var(--muted); }
         where.className = 'sub url';
         where.textContent = t.onWeb + tile.url;
         name.appendChild(where);
+      }
+      if (entitaCasa(tile)) {
+        var ent = document.createElement('span');
+        ent.className = 'sub';
+        ent.textContent = t.haOnTile + entitaCasa(tile);
+        name.appendChild(ent);
       }
       if (orig && orig !== tile.title) {
         var sub = document.createElement('span');
@@ -1832,6 +1864,171 @@ footer a { color: var(--muted); }
 
   /* ---------- start ---------- */
 
+  /* ---------- Home Assistant ---------- */
+
+  // Its words, put with the others.
+  var HA_T = {
+    haLede: 'Values from Home Assistant under the weather, and tiles that switch a light or a switch, or run a scene or a script. Off until it is connected.',
+    haConnect: 'Connect', haToken: 'Long-lived access token', haTokenKept: 'Token saved',
+    haTokenLede: 'Make the token in Home Assistant, under your profile, Security. A user of its own for the TV, not an administrator, is safer. The token stays on the TV.',
+    haAsking: 'Asking Home Assistant…', haConnected: 'Connected to ', haReading: 'Reading what Home Assistant has…',
+    haErr_token: 'Home Assistant did not take the token.', 'haErr_no answer': 'Home Assistant does not answer at that address.',
+    haErr_address: 'An address is http:// or https://, the IP or name, and the port, as http://192.168.1.10:8123.',
+    'haErr_token needed': 'A new address needs the token again.', haNoList: 'Could not read what Home Assistant has: ',
+    haShowTitle: 'Under the weather', haShowAdd: 'Show a value…', haShowFull: 'Four values at most.', haTileAdd: 'Add a tile…',
+    haTileLede: 'A tile goes at the end of the row, and moves like the others. OK switches its light or switch, or runs its scene or script.',
+    haLights: 'Lights', haSwitches: 'Switches', haScenes: 'Scenes and scripts', haName: 'Name under the weather',
+    haOff: 'Disconnect', haOnTile: 'Home Assistant: ', gen_light: 'Light', gen_power: 'Power', gen_scene: 'Scene'
+  };
+  Object.keys(HA_T).forEach(function (k) { T.en[k] = HA_T[k]; });
+
+  var haList = null; // what HA has, read for the lists: [{id, s, u, n}]
+  var HA_GROUPS = [['haLights', /^light\./], ['haSwitches', /^(switch|input_boolean)\./], ['haScenes', /^(scene|script)\./]];
+
+  function haNote(text, err) { $('ha-note').textContent = text || ''; $('ha-note').hidden = !text; $('ha-note').className = 'note' + (err ? ' err' : ''); }
+  function haErr(raw) { var e = raw && raw.error; return t['haErr_' + e] || e || t.offline; }
+  function haOf(id) { for (var k = 0; haList && k < haList.length; k++) if (haList[k].id === id) return haList[k]; return null; }
+  function haName(id) { var e = haOf(id); return (e && e.n) || id; }
+  var virgola = (1.5).toLocaleString().indexOf(',') !== -1;
+
+  function haRead() {
+    if (!cfg.haUrl) { haList = null; return renderHa(); }
+    api('GET', '/api/ha/entities', null, function (r, raw) {
+      haList = r ? r.entities.sort(function (a, b) { return haName(a.id).toLowerCase() < haName(b.id).toLowerCase() ? -1 : 1; }) : null;
+      if (!r) haNote(t.haNoList + haErr(raw), true);
+      renderHa();
+      preview();
+    });
+  }
+
+  function haShow(show) {
+    api('POST', '/api/ha', { show: show }, function (r, raw) {
+      if (!r) return haNote(haErr(raw), true);
+      cfg = r.config;
+      renderHa();
+      preview();
+    });
+  }
+
+  function option(sel, value, text) {
+    var o = document.createElement('option');
+    o.value = value;
+    o.textContent = text;
+    sel.appendChild(o);
+    return o;
+  }
+
+  function renderHa() {
+    var on = !!cfg.haUrl, show = cfg.haShow || [];
+    if (document.activeElement !== $('ha-url')) $('ha-url').value = cfg.haUrl || '';
+    $('ha-token').placeholder = on ? t.haTokenKept : t.haToken;
+    $('ha-on').hidden = !on;
+    if (!on) return;
+    var list = $('ha-show');
+    list.innerHTML = '';
+    show.forEach(function (e, i) {
+      var li = document.createElement('li'), name = document.createElement('div'), input = document.createElement('input'), sub = document.createElement('span');
+      name.className = 'name';
+      input.type = 'text';
+      input.maxLength = 40;
+      input.value = e.name || haName(e.id);
+      input.setAttribute('aria-label', t.haName);
+      input.onchange = function () {
+        var v = input.value.replace(/^\s+|\s+$/g, '');
+        haShow(show.map(function (x, k) { return k === i ? { id: x.id, name: v } : x; }));
+      };
+      sub.className = 'sub';
+      sub.textContent = e.id + ' \u00b7 ' + valoreCasa(haOf(e.id), virgola);
+      name.appendChild(input);
+      name.appendChild(sub);
+      li.appendChild(name);
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'icon-btn';
+      b.innerHTML = svg('drop');
+      b.setAttribute('aria-label', t.drop + ': ' + input.value);
+      b.onclick = function () { haShow(show.filter(function (x, k) { return k !== i; })); };
+      li.appendChild(b);
+      list.appendChild(li);
+    });
+    // A value of anything HA has, by its kind; a tile for what OK can switch or run, not yet a tile.
+    var addShow = $('ha-add-show'), addTile = $('ha-add-tile'), groups = {}, tiled = {};
+    addShow.innerHTML = addTile.innerHTML = '';
+    option(addShow, '', show.length >= 4 ? t.haShowFull : t.haShowAdd);
+    option(addTile, '', t.haTileAdd);
+    (haList || []).forEach(function (e) {
+      var kind = e.id.split('.')[0];
+      if (!groups[kind]) { groups[kind] = document.createElement('optgroup'); groups[kind].label = kind; }
+      option(groups[kind], e.id, haName(e.id) + ' \u00b7 ' + valoreCasa(e, virgola));
+    });
+    Object.keys(groups).sort().forEach(function (k) { addShow.appendChild(groups[k]); });
+    (cfg.tiles || []).forEach(function (x) { if (entitaCasa(x)) tiled[entitaCasa(x)] = true; });
+    HA_GROUPS.forEach(function (g) {
+      var og = document.createElement('optgroup');
+      og.label = t[g[0]];
+      (haList || []).forEach(function (e) { if (g[1].test(e.id) && !tiled[e.id]) option(og, e.id, haName(e.id)); });
+      if (og.children.length) addTile.appendChild(og);
+    });
+    addShow.disabled = show.length >= 4 || !haList;
+    addTile.disabled = !haList || (cfg.tiles || []).length >= 50;
+    addShow.setAttribute('aria-label', t.haShowAdd);
+    addTile.setAttribute('aria-label', t.haTileAdd);
+  }
+
+  $('ha-add-show').onchange = function () {
+    var id = this.value;
+    if (id) haShow((cfg.haShow || []).concat([{ id: id, name: haName(id) }]));
+  };
+  $('ha-add-tile').onchange = function () {
+    var id = this.value;
+    if (!id) return;
+    cfg.tiles = (cfg.tiles || []).concat([{ id: 'ha.' + id, title: haName(id).slice(0, 40) }]);
+    saveTiles();
+    renderHa();
+  };
+  $('ha-connect').onclick = function () {
+    var body = { url: $('ha-url').value.replace(/^\s+|\s+$/g, '') }, token = $('ha-token').value.replace(/\s+/g, '');
+    if (token) body.token = token;
+    haNote(t.haAsking);
+    api('POST', '/api/ha', body, function (r, raw) {
+      if (!r) return haNote(haErr(raw), true);
+      cfg = r.config;
+      $('ha-token').value = '';
+      haNote(t.haConnected + cfg.haUrl);
+      haRead();
+    });
+  };
+  $('ha-off').onclick = function () {
+    api('POST', '/api/ha', { url: null }, function (r, raw) {
+      if (!r) return haNote(haErr(raw), true);
+      cfg = r.config;
+      haList = null;
+      haNote('');
+      renderTiles();
+      renderHa();
+      preview();
+    });
+  };
+
+  // The values under the weather in the preview, as the Home shows them.
+  function haPreview() {
+    var el = $('p-casa'), show = cfg.haShow || [];
+    if (!show.length) { if (el) el.parentNode.removeChild(el); return; }
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'p-casa';
+      el.className = 'casa';
+      $('p-meteo').parentNode.appendChild(el);
+    }
+    el.innerHTML = '';
+    show.forEach(function (e, i) {
+      if (i) el.appendChild(document.createTextNode(' \u00b7 '));
+      var x = document.createElement('span');
+      x.textContent = (e.name || haName(e.id)) + ' ' + valoreCasa(haOf(e.id), virgola);
+      el.appendChild(x);
+    });
+  }
+
   function render() {
     renderTiles();
     renderBg();
@@ -1861,6 +2058,8 @@ footer a { color: var(--muted); }
     renderPin();
     renderPort();
     checkForUpdate();
+    renderHa();
+    haRead();
     preview();
   }
 
