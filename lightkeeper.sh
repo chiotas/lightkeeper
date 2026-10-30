@@ -19,7 +19,9 @@ APPDIR=/media/developer/apps/usr/palm/applications/$ID
 
 # The .ipk, written by Python alone: a Debian ar archive of debian-binary,
 # control.tar.gz and data.tar.gz. The tars are plain ustar owned by root, with
-# no extended attributes, which the TV refuses ("ipk verified failed").
+# no extended attributes, which the TV refuses ("ipk verified failed"). Names
+# have no leading ./, as in ares-package's packages: the Homebrew Channel
+# catalog's check reads control and usr/palm/... by exactly those names.
 build() {
   mkdir -p "$DIR/dist"
   python3 - "$DIR" "$IPK" "$ID" "$VERSION" <<'EOF'
@@ -60,8 +62,7 @@ def add_dir(d):
         p = '/'.join(parts[:i])
         if p not in dirs:
             dirs.add(p)
-            entries.append(('./' + p, None, 0o755))
-entries.append(('./', None, 0o755))
+            entries.append((p, None, 0o755))
 for here, subdirs, files in os.walk(app):
     subdirs.sort()
     rel = os.path.relpath(here, app)
@@ -70,15 +71,15 @@ for here, subdirs, files in os.walk(app):
         if f.startswith('.'):
             continue
         r = f if rel == '.' else rel + '/' + f
-        entries.append(('./' + base + '/' + r, open(os.path.join(here, f), 'rb').read(), 0o755 if r in EXEC else 0o644))
+        entries.append((base + '/' + r, open(os.path.join(here, f), 'rb').read(), 0o755 if r in EXEC else 0o644))
 add_dir('usr/palm/packages/' + app_id)
 packageinfo = {'app': app_id, 'id': app_id, 'loc_name': 'Lightkeeper', 'package_format_version': 2, 'vendor': 'Francesco Gola', 'version': version}
-entries.append(('./usr/palm/packages/%s/packageinfo.json' % app_id, (json.dumps(packageinfo) + '\n').encode(), 0o644))
+entries.append(('usr/palm/packages/%s/packageinfo.json' % app_id, (json.dumps(packageinfo) + '\n').encode(), 0o644))
 data = tar(entries)
 control = ('Package: %s\nVersion: %s\nSection: misc\nPriority: optional\nArchitecture: all\n'
            'Installed-Size: %d\nMaintainer: Francesco Gola\nDescription: Lightkeeper, a calm Home for LG TVs\n'
            'webOS-Package-Format-Version: 2\nwebOS-Packager-Version: lightkeeper.sh\n') % (app_id, version, len(data) // 1024)
-parts = [('debian-binary', b'2.0\n'), ('control.tar.gz', tar([('./', None, 0o755), ('./control', control.encode(), 0o644)])), ('data.tar.gz', data)]
+parts = [('debian-binary', b'2.0\n'), ('control.tar.gz', tar([('control', control.encode(), 0o644)])), ('data.tar.gz', data)]
 with open(ipk, 'wb') as out:
     out.write(b'!<arch>\n')
     for n, d in parts:
