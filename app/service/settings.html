@@ -469,20 +469,19 @@ footer a { color: var(--muted); }
 
       <section aria-labelledby="h-ha">
         <h2 id="h-ha">Home Assistant</h2>
-        <p class="lede" data-t="haLede">Values from Home Assistant under the weather, and tiles that switch a light or a switch, or run a scene or a script. Off until it is connected.</p>
+        <p class="lede" data-t="haLede">Values under the weather, and tiles that switch a light or run a scene. Off until it is connected.</p>
         <div class="add-web">
           <input type="url" id="ha-url" maxlength="300" placeholder="http://192.168.1.10:8123" aria-label="Address of Home Assistant">
           <input type="password" id="ha-token" autocomplete="off" spellcheck="false" placeholder="Long-lived access token" aria-label="Access token">
-          <button class="btn" type="button" id="ha-connect" data-t="haConnect">Connect</button>
+          <button class="btn" type="button" id="ha-connect" data-t="haConnect">Test</button>
         </div>
         <p class="note" id="ha-note" aria-live="polite" hidden></p>
-        <p class="note" data-t="haTokenLede">Make the token in Home Assistant, under your profile, Security. A user of its own for the TV, not an administrator, is safer. The token stays on the TV.</p>
+        <p class="note" data-t="haTokenLede">The token: in Home Assistant, your profile, Security. Best from a user of its own, not an administrator.</p>
         <div id="ha-on" hidden>
           <span class="label" data-t="haShowTitle">Under the weather</span>
           <ul class="tiles" id="ha-show"></ul>
           <div class="add"><select id="ha-add-show"></select></div>
           <div class="add"><select id="ha-add-tile"></select></div>
-          <p class="note" data-t="haTileLede">A tile goes at the end of the row, and moves like the others. OK switches its light or switch, or runs its scene or script.</p>
           <div class="actions"><button class="btn danger" type="button" id="ha-off" data-t="haOff">Disconnect</button></div>
         </div>
       </section>
@@ -1868,17 +1867,16 @@ footer a { color: var(--muted); }
 
   // Its words, put with the others.
   var HA_T = {
-    haLede: 'Values from Home Assistant under the weather, and tiles that switch a light or a switch, or run a scene or a script. Off until it is connected.',
-    haConnect: 'Connect', haToken: 'Long-lived access token', haTokenKept: 'Token saved',
-    haTokenLede: 'Make the token in Home Assistant, under your profile, Security. A user of its own for the TV, not an administrator, is safer. The token stays on the TV.',
-    haAsking: 'Asking Home Assistant…', haConnected: 'Connected to ', haReading: 'Reading what Home Assistant has…',
+    haLede: 'Values under the weather, and tiles that switch a light or run a scene. Off until it is connected.',
+    haConnect: 'Test', haToken: 'Long-lived access token', haTokenKept: 'Token saved',
+    haTokenLede: 'The token: in Home Assistant, your profile, Security. Best from a user of its own, not an administrator.',
+    haAsking: 'Asking Home Assistant…', haConnected: 'It works: connected to ',
     haErr_token: 'Home Assistant did not take the token.', 'haErr_no answer': 'Home Assistant does not answer at that address.',
     haErr_address: 'An address is http:// or https://, the IP or name, and the port, as http://192.168.1.10:8123.',
     'haErr_token needed': 'A new address needs the token again.', haNoList: 'Could not read what Home Assistant has: ',
     haShowTitle: 'Under the weather', haShowAdd: 'Show a value…', haShowFull: 'Four values at most.', haTileAdd: 'Add a tile…',
-    haTileLede: 'A tile goes at the end of the row, and moves like the others. OK switches its light or switch, or runs its scene or script.',
     haLights: 'Lights', haSwitches: 'Switches', haScenes: 'Scenes and scripts', haName: 'Name under the weather',
-    haOff: 'Disconnect', haOnTile: 'Home Assistant: ', gen_light: 'Light', gen_power: 'Power', gen_scene: 'Scene'
+    haOff: 'Disconnect', haOnTile: 'Home Assistant: ', gen_light: 'Light', gen_toggle: 'Switch', gen_scene: 'Scene'
   };
   Object.keys(HA_T).forEach(function (k) { T.en[k] = HA_T[k]; });
 

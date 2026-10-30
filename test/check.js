@@ -1020,6 +1020,20 @@ function migrationChecks(done) {
 // The Home's values and presses answer the Home only, and press only what a tile has. An HA that
 // does not answer gives no values, in time. Off again, its entities and tiles go.
 function haChecks(done) {
+  // The Home's and the settings' side, from logos.js: which tiles are HA's, their icons, and how a value reads.
+  assert.equal(logos.entitaCasa({ id: 'ha.light.sala' }), 'light.sala');
+  assert.equal(logos.entitaCasa({ id: 'ha.sensor.patio' }), null, 'a sensor is a value, not a tile');
+  assert.equal(logos.entitaCasa({ id: 'netflix' }), null);
+  assert.equal(logos.logoDi({ id: 'ha.light.sala', title: 'Sala' }, 'logo'), 'light');
+  assert.equal(logos.logoDi({ id: 'ha.input_boolean.x', title: 'X' }, 'icon'), 'toggle');
+  assert.equal(logos.logoDi({ id: 'ha.script.saluta', title: 'Saluta' }, 'logo'), 'media');
+  assert.equal(logos.logoDi({ id: 'ha.light.sala', title: 'Sala' }, 'text'), '');
+  Object.keys(logos.ICONE_VUOTE).forEach(function (n) { assert.ok(logos.ICONE[n], 'an empty ' + n + ' has a full one'); });
+  assert.equal(logos.valoreCasa({ s: '21.47', u: '°C' }, true), '21,5\u00a0°C');
+  assert.equal(logos.valoreCasa({ s: '21.5', u: '°C' }, false), '21.5\u00a0°C');
+  assert.equal(logos.valoreCasa({ s: 'not_home', u: '' }, false), 'not home');
+  assert.equal(logos.valoreCasa({ s: 'unavailable' }, false), '\u2014');
+  assert.equal(logos.valoreCasa(undefined, false), '\u2014');
   var server = path.join(__dirname, '..', 'app', 'service', 'server.js');
   var TOKEN = 'eyJhbGciOiJIUzI1NiJ9.the-check-s-own.Zm9vYmFy';
   var data = path.join(tmp, 'data-ha'), tokenFile = path.join(data, 'ha-token');

@@ -162,11 +162,11 @@ body.pannello .freccia { visibility: hidden; }
   white-space: nowrap;
 }
 #hint.on { opacity: .8; }
-/* Home Assistant: its values under the weather; a tile's on or off after its name, or its icon dimmed when off. */
+/* Home Assistant: its values under the weather, as the weather; a light or switch that is off has its
+   icon empty (statoVoce), and with names only, its name fainter. */
 #casa { margin-top: 14px; font-size: 34px; font-weight: 300; opacity: .9; }
 #casa span { white-space: nowrap; }
-nav a b.stato { font-size: 32px; font-weight: 300; margin-left: 12px; }
-nav a[data-spenta] svg { opacity: .4; }
+nav:not(.icons) a[data-spenta] i { opacity: .55; }
 </style>
 </head>
 <body>
@@ -335,6 +335,7 @@ function caricaVisibili() {
       var f = caricatori[k];
       caricatori[k] = null;
       f();
+      if (entitaCasa(voci[k])) statoVoce(el, entitaCasa(voci[k])); // drawn full: emptied if off
     }
   }
 }
@@ -726,14 +727,14 @@ function mettiCasa() {
   if (!usaCasa() && casaGiro) { clearInterval(casaGiro); casaGiro = null; }
 }
 
-// On or off after the name; with logos and icons, the icon dimmed when off.
+// Off, or not known: its icon empty, of the same size, unless the tile has a logo chosen; with names only, its name fainter.
 function statoVoce(a, id) {
   var e = stati[id], spenta = acceso(id) && !(e && e.s === 'on');
   if (spenta !== a.hasAttribute('data-spenta')) { if (spenta) a.setAttribute('data-spenta', ''); else a.removeAttribute('data-spenta'); }
-  if (!acceso(id) || cfg.tileStyle === 'logo' || cfg.tileStyle === 'icon') return;
-  var b = a.getElementsByTagName('b')[0], t = e && (e.s === 'on' || e.s === 'off') ? e.s : '\u2014';
-  if (!b) { b = document.createElement('b'); b.className = 'stato'; a.appendChild(b); }
-  if (b.textContent !== t) b.textContent = t;
+  var nome = ICONE_CASA[id.split('.')[0]], path = a.getElementsByTagName('path')[0];
+  if (!path || !ICONE_VUOTE[nome]) return;
+  var d = path.getAttribute('d');
+  if (d === ICONE[nome] || d === ICONE_VUOTE[nome]) path.setAttribute('d', spenta ? ICONE_VUOTE[nome] : ICONE[nome]);
 }
 
 function chiediCasa() {
