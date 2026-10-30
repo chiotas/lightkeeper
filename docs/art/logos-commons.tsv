@@ -89,3 +89,14 @@ france24	File:France 24 logo (2013).svg	pd-textlogo, trademarked
 dw	File:Deutsche Welle symbol 2012.svg	pd-textlogo, trademarked
 skynews	File:Sky News 2026.svg	pd-textlogo
 wii	File:Wii.svg	pd-textlogo, trademarked
+wiiu	File:WiiU.svg	pd-textlogo, trademarked
+gamecube	File:Nintendo GameCube Official Logo.svg	pd-textlogo, trademarked
+nintendo64	File:Nintendo 64 wordmark.svg	pd-textlogo, trademarked
+snes	File:Super Nintendo Entertainment System logo.svg	pd-textlogo, trademarked
+nes	File:NES logo.svg	pd-textlogo, trademarked
+dreamcast	File:Dreamcast logo.svg	pd-textlogo, pd-shape, trademarked
+segasaturn	File:Sega Saturn Black Logo.svg	pd-textlogo, trademarked
+# megadrive: only the MEGA DRIVE wordmark at the foot of the file, its viewBox set to "0 170 294 30".
+megadrive	File:MegaDriveJPLogo.svg	pd-textlogo, trademarked
+genesis	File:Sega genesis logo.svg	pd-textlogo, trademarked
+xbox360	File:Xbox 360 wordmark.svg	pd-textlogo, trademarked

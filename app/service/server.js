@@ -381,7 +381,9 @@ function pauseSaver(ms) {
 
 var ID_RE = /^[A-Za-z0-9_-][A-Za-z0-9._-]{0,127}$/;
 // The devices an HDMI input can be set to, as in logos.js.
-var DEVICES = ['ps5', 'ps4', 'xboxseries', 'xbox', 'switch2', 'switch', 'wii', 'steamdeck', 'appletv', 'shield', 'chromecast', 'googletv', 'firetv', 'roku', 'console', 'player', 'tv', 'hdmi'];
+var DEVICES = ['ps5', 'ps4', 'ps3', 'ps2', 'ps1', 'xboxseries', 'xbox', 'xbox360', 'switch2', 'switch', 'wiiu', 'wii',
+  'gamecube', 'n64', 'snes', 'nes', 'dreamcast', 'saturn', 'megadrive', 'genesis', 'atari', 'steamdeck', 'appletv',
+  'shield', 'chromecast', 'googletv', 'firetv', 'roku', 'console', 'player', 'tv', 'hdmi'];
 
 function str(v, max) {
   return typeof v === 'string' ? v.replace(/[\u0000-\u001f\u007f]/g, '').replace(/^\s+|\s+$/g, '').slice(0, max) : '';

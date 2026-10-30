@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.12 (unreleased)
+
+- **Older consoles**, as asked on Reddit, among the devices an HDMI input can show: the first PlayStation, PlayStation 2 and 3, Xbox 360, Wii U, GameCube, Nintendo 64, Super Nintendo, NES, Dreamcast, Sega Saturn, Mega Drive, Genesis and Atari. Pick one in the settings, or let *Automatic* find it in the input's name: an input called PS2, which showed the HDMI icon, now shows the PS2 logo, and one called Wii U no longer shows the Wii's. Their logos are in the settings' icon grid too, for any tile. The PlayStation logos and Atari's come from Simple Icons (CC0) like the other drawn logos; the others from Wikimedia Commons, where they are in the public domain as simple text and shapes, made white like the others, and of the Japanese Mega Drive logo only its *MEGA DRIVE* wordmark. `docs/art/logos-commons.tsv` lists each file.
+
 ## 1.0.11 (30 October 2026)
 
 - **The Home shows again on webOS 3.** With 1.0.10 it stayed black, as reported on Reddit from a TV with webOS 3.4. A line added in 1.0.10, which places the two rows again once the typeface is loaded, takes `document.fonts.ready` for a promise; in an engine where it is still a method, as in an early draft of the standard, that throws, and the Home stopped before drawing a tile or the picture. In a computer's browser made to have `ready` as a method, 1.0.10 stays black with that error and 1.0.11 draws the Home; with `ready` as a promise, as on newer TVs, nothing changes. Not yet tried on a webOS 3 TV.
