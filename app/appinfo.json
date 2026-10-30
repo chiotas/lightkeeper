@@ -1,6 +1,6 @@
 {
   "id": "io.github.chiotas.lightkeeper",
-  "version": "1.0.11",
+  "version": "1.0.12",
   "vendor": "Francesco Gola",
   "type": "web",
   "main": "index.html",
