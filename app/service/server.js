@@ -899,6 +899,238 @@ function watchApp() {
   uninstall(false, function () { process.exit(0); });
 }
 
+/* ---------- Home Assistant ---------- */
+
+/*
+ * Off until an address and a token are set in the settings: then up to four of its
+ * entities beside the clock, and tiles (id "ha.<entity>") that switch a light, a switch
+ * or an input_boolean, or run a scene or a script. This server makes every call, with
+ * HA's REST API and short timeouts; the Home and the settings page only ask it. The
+ * token is kept in a file of its own, never in the config, and never goes back to a page
+ * or into the log. An https address goes through the TV's curl, as updates do: the token
+ * then reaches curl on its standard input, not its command line, which other programs see.
+ */
+var parseUrl = require('url').parse;
+var HA_TOKEN = path.join(DATA, 'ha-token');
+var HA_TIMEOUT = 4000;
+var HA_MAX = 8 * 1024 * 1024; // a whole /api/states, for the settings' lists
+var HA_SHOW = 4;
+var HA_ENTITY = /^[a-z0-9_]+\.[a-z0-9_]+$/;
+var HA_URL = /^https?:\/\/([A-Za-z0-9.-]+|\[[0-9A-Fa-f:.]+\])(:\d{1,5})?$/;
+// A long-lived access token is a JWT: nothing that could end a header or a line of curl's config.
+var HA_TOKEN_RE = /^[A-Za-z0-9._~+\/=-]{20,2000}$/;
+// What OK on a tile asks, by the entity's domain.
+var HA_PRESS = { light: 'toggle', 'switch': 'toggle', input_boolean: 'toggle', scene: 'turn_on', script: 'turn_on' };
+// The address, and the entities beside the clock: [{id, name}].
+DEFAULTS.haUrl = null;
+DEFAULTS.haShow = [];
+
+function haTokenNow() {
+  try { return fs.readFileSync(HA_TOKEN, 'utf8').trim(); } catch (e) { return ''; }
+}
+
+// The entity a tile switches, or null for any other tile.
+function haTile(id) {
+  var m = /^ha\.(([a-z0-9_]+)\.[a-z0-9_]+)$/.exec(id || '');
+  return m && has(HA_PRESS, m[2]) ? m[1] : null;
+}
+
+// The entities the Home shows: those beside the clock, then the tiles'.
+function haIds() {
+  var ids = [];
+  (config.haShow || []).forEach(function (e) { if (ids.indexOf(e.id) === -1) ids.push(e.id); });
+  (config.tiles || []).forEach(function (t) { var e = haTile(t.id); if (e && ids.indexOf(e) === -1) ids.push(e); });
+  return ids;
+}
+
+/*
+ * These paths of HA's API, all at once, at base with token; cb([{code, body}]) in the same
+ * order, code 0 where HA did not answer in time. With post, a POST of that JSON to each.
+ */
+function haAsk(base, token, paths, post, cb) {
+  if (!paths.length) return cb([]);
+  var none = function () { return paths.map(function () { return { code: 0, body: '' }; }); };
+  if (/^https:/.test(base)) {
+    if (!fs.existsSync(CURL)) return cb(none());
+    // One curl for every path, each answer followed by its status on a line of its own:
+    // HA's JSON and its error pages are one line each.
+    var args = ['-sS', '-K', '-', '--connect-timeout', '3', '--max-time', String(HA_TIMEOUT / 1000), '-w', '\\n%{http_code}\\n'];
+    if (post) args.push('-X', 'POST', '-H', 'Content-Type: application/json', '-d', JSON.stringify(post));
+    var child = execFile(CURL, args.concat(paths.map(function (p) { return base + p; })),
+      { timeout: HA_TIMEOUT * paths.length + 2000, maxBuffer: HA_MAX }, function (err, out) {
+        var lines = String(out || '').split('\n');
+        cb(paths.map(function (p, i) { return { code: +lines[2 * i + 1] || 0, body: lines[2 * i] || '' }; }));
+      });
+    child.stdin.on('error', function () {});
+    child.stdin.end('header = "Authorization: Bearer ' + token + '"\n');
+    return;
+  }
+  var out = [], left = paths.length;
+  paths.forEach(function (p, i) {
+    var u = parseUrl(base + p), parts = [], size = 0, done = false;
+    var fin = function (code, body) {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      out[i] = { code: code, body: body };
+      if (!--left) cb(out);
+    };
+    var r = http.request({ hostname: u.hostname, port: u.port || 80, path: u.path, method: post ? 'POST' : 'GET',
+      headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' } }, function (res) {
+      res.on('data', function (d) { size += d.length; if (size <= HA_MAX) parts.push(d); });
+      res.on('end', function () { fin(size > HA_MAX ? 0 : res.statusCode, Buffer.concat(parts).toString('utf8')); });
+    });
+    var timer = setTimeout(function () { fin(0, ''); r.abort(); }, HA_TIMEOUT);
+    r.on('error', function () { fin(0, ''); });
+    r.end(post ? JSON.stringify(post) : undefined);
+  });
+}
+
+// What a failed answer means, for the settings page and the log.
+function haError(code) { return code === 401 || code === 403 ? 'token' : code === 0 ? 'no answer' : 'HA answered ' + code; }
+
+// Logged when it changes only: the Home asks every few seconds.
+var haLast = '';
+function haNote(what) {
+  if (what !== haLast) log('home assistant: ' + what);
+  haLast = what;
+}
+
+// An entity as the Home shows it: state, unit and name, cleaned.
+function haEntity(e) {
+  var a = (e && e.attributes) || {};
+  return { s: str(e && e.state, 60), u: str(a.unit_of_measurement, 12), n: str(a.friendly_name, 60) };
+}
+
+// cb({entity: {s, u, n}}) for the entities the Home shows; those HA did not give are missing.
+// One ask at a time, which those coming meanwhile share: an HA that hangs keeps one waiting, not a pile.
+var haWaiting = null;
+function haStates(cb) {
+  var ids = haIds(), token = haTokenNow();
+  if (!config.haUrl || !token || !ids.length) return cb({});
+  if (haWaiting) return haWaiting.push(cb);
+  haWaiting = [cb];
+  haAsk(config.haUrl, token, ids.map(function (id) { return '/api/states/' + id; }), null, function (res) {
+    var states = {}, bad = 0;
+    res.forEach(function (r, i) {
+      var e = null;
+      if (r.code === 200) { try { e = JSON.parse(r.body); } catch (x) {} }
+      if (e && e.entity_id === ids[i]) states[ids[i]] = haEntity(e);
+      else if (r.code !== 404) bad = r.code || -1;
+    });
+    haNote(bad ? haError(bad === -1 ? 0 : bad) : 'answering');
+    var waiting = haWaiting;
+    haWaiting = null;
+    waiting.forEach(function (f) { f(states); });
+  });
+}
+
+// The Home's two calls: the values, and OK on a tile. Only from the Home, as the open apps.
+function haHome(req, res, m, p) {
+  if (!fromHome(req)) {
+    log('home assistant refused: ' + req.socket.remoteAddress + ', origin ' + req.headers.origin);
+    return send(res, 403, { ok: false, error: 'the Home only' });
+  }
+  var cors = req.headers.origin ? { 'Access-Control-Allow-Origin': req.headers.origin, 'Vary': 'Origin' } : {};
+  if (m === 'GET' && p === '/api/ha/states') return haStates(function (s) { send(res, 200, { ok: true, states: s }, cors); });
+  if (m === 'OPTIONS' && p === '/api/ha/press') {
+    cors['Access-Control-Allow-Methods'] = 'POST';
+    cors['Access-Control-Allow-Headers'] = 'Content-Type';
+    cors['Access-Control-Max-Age'] = '600';
+    return send(res, 204, '', cors);
+  }
+  // JSON only: from a page elsewhere, that type needs a preflight, which fromHome refuses.
+  if (m === 'POST' && p === '/api/ha/press') {
+    if (String(req.headers['content-type'] || '').split(';')[0].toLowerCase() !== 'application/json') return send(res, 415, { ok: false, error: 'bad request' }, cors);
+    return readBody(req, MAX_JSON, function (b) {
+      var body = null;
+      try { body = JSON.parse(String(b)); } catch (e) {}
+      var id = body && typeof body.id === 'string' ? body.id : '';
+      // Only an entity a tile has: never any other HA can switch.
+      var tiled = (config.tiles || []).some(function (t) { return haTile(t.id) === id; });
+      if (!tiled) return send(res, 400, { ok: false, error: 'not a tile' }, cors);
+      var token = haTokenNow();
+      if (!config.haUrl || !token) return send(res, 409, { ok: false, error: 'Home Assistant is off' }, cors);
+      var domain = id.split('.')[0];
+      haAsk(config.haUrl, token, ['/api/services/' + domain + '/' + HA_PRESS[domain]], { entity_id: id }, function (r) {
+        var ok = r[0].code === 200;
+        haNote(ok ? 'answering' : haError(r[0].code));
+        if (ok) log('home assistant: ' + domain + '.' + HA_PRESS[domain] + ' ' + id);
+        haStates(function (s) { send(res, ok ? 200 : 502, { ok: ok, states: s, error: ok ? undefined : haError(r[0].code) }, cors); });
+      });
+    });
+  }
+  return send(res, 405, { ok: false, error: 'not allowed' }, cors);
+}
+
+/*
+ * The settings page's calls, behind the PIN. POST /api/ha:
+ *   {url, token}  checked against HA, then kept; a new address needs the token again, so a
+ *                 change of address can never send the kept token somewhere else
+ *   {url: null}   off: the token, the entities and the tiles go
+ *   {show: [{id, name}]}  the entities beside the clock, up to four
+ * GET /api/ha/entities lists what HA has, to choose from: names only, and the values of those
+ * the Home shows. Without a PIN anyone on the network can open this page, and HA's values (who
+ * is home, a door) are not theirs to read through the TV.
+ */
+function haSettings(req, res, m, p) {
+  if (m === 'GET' && p === '/api/ha/entities') {
+    var token = haTokenNow();
+    if (!config.haUrl || !token) return send(res, 409, { ok: false, error: 'Home Assistant is off' });
+    return haAsk(config.haUrl, token, ['/api/states'], null, function (r) {
+      var list = null;
+      if (r[0].code === 200) { try { list = JSON.parse(r[0].body); } catch (e) {} }
+      if (!Array.isArray(list)) return send(res, 502, { ok: false, error: haError(r[0].code === 200 ? 0 : r[0].code) });
+      var ids = haIds(), states = {};
+      list = list.filter(function (e) { return e && HA_ENTITY.test(e.entity_id || ''); });
+      list.forEach(function (e) { if (ids.indexOf(e.entity_id) !== -1) states[e.entity_id] = haEntity(e); });
+      send(res, 200, { ok: true, entities: list.map(function (e) { return { id: e.entity_id, n: haEntity(e).n }; }), states: states });
+    });
+  }
+  if (m !== 'POST' || p !== '/api/ha') return send(res, 404, { ok: false, error: 'not found' });
+  readJson(req, res, function (body) {
+    if (has(body, 'show')) {
+      var v = body.show, show = [];
+      if (!Array.isArray(v) || v.length > HA_SHOW) return send(res, 400, { ok: false, error: 'invalid: show' });
+      for (var i = 0; i < v.length; i++) {
+        if (!v[i] || !HA_ENTITY.test(v[i].id || '')) return send(res, 400, { ok: false, error: 'invalid: show' });
+        show.push({ id: v[i].id, name: str(v[i].name, 40) });
+      }
+      config.haShow = show;
+      saveConfig();
+      return send(res, 200, { ok: true, config: publicConfig() });
+    }
+    if (body.url === null) {
+      try { fs.unlinkSync(HA_TOKEN); } catch (e) {}
+      config.haUrl = null;
+      config.haShow = [];
+      if (config.tiles) config.tiles = config.tiles.filter(function (t) { return !/^ha\./.test(t.id); });
+      saveConfig();
+      log('home assistant: off');
+      return send(res, 200, { ok: true, config: publicConfig() });
+    }
+    var url = typeof body.url === 'string' ? body.url.replace(/^\s+|\/*\s*$/g, '') : '';
+    if (!HA_URL.test(url)) return send(res, 400, { ok: false, error: 'address' });
+    var given = typeof body.token === 'string' && body.token.replace(/\s+/g, '');
+    if (given && !HA_TOKEN_RE.test(given)) return send(res, 400, { ok: false, error: 'token' });
+    if (!given && url !== config.haUrl) return send(res, 400, { ok: false, error: 'token needed' });
+    var token = given || haTokenNow();
+    if (!token) return send(res, 400, { ok: false, error: 'token needed' });
+    haAsk(url, token, ['/api/'], null, function (r) {
+      if (r[0].code !== 200) return send(res, 502, { ok: false, error: haError(r[0].code) });
+      try {
+        if (!fs.existsSync(DATA)) fs.mkdirSync(DATA, 448);
+        if (given) writeAtomic(HA_TOKEN, given + '\n');
+        config.haUrl = url;
+        saveConfig();
+      } catch (e) { return send(res, 500, { ok: false, error: e.message }); }
+      log('home assistant: connected to ' + url);
+      haLast = 'answering';
+      send(res, 200, { ok: true, config: publicConfig() });
+    });
+  });
+}
+
 /* ---------- HTTP ---------- */
 
 var TYPES = { '.html': 'text/html; charset=utf-8', '.woff2': 'font/woff2', '.jpg': 'image/jpeg',
@@ -1198,10 +1430,13 @@ function handle(req, res) {
     }
     return send(res, 405, { ok: false, error: 'not allowed' }, cors);
   }
+  // Home Assistant: the Home's values and presses (haHome), then the settings' (haSettings).
+  if (p === '/api/ha/states' || p === '/api/ha/press') return haHome(req, res, m, p);
   if (p.indexOf('/api/') !== 0) return send(res, 404, { ok: false, error: 'not found' });
   if (!pinOk(req)) {
     return send(res, 401, { ok: false, error: Date.now() < pinLockedUntil ? 'locked' : 'pin' });
   }
+  if (p === '/api/ha' || p === '/api/ha/entities') return haSettings(req, res, m, p);
 
   if (m === 'GET' && p === '/api/tv') {
     return listApps(function (apps) {
