@@ -27,7 +27,7 @@ var vm = require('vm');
 var execFile = require('child_process').execFile;
 var spawn = require('child_process').spawn;
 
-var VERSION = '1.0.9';
+var VERSION = '1.0.10';
 var APP_ID = 'io.github.chiotas.lightkeeper';
 var HERE = __dirname;
 var APP_DIR = path.dirname(HERE);
