@@ -76,7 +76,7 @@ var IMMAGINI = {"chromecast": [1981, 240], "discoveryplus": [1185, 221], "disney
   "slingtv": [444, 240], "philo": [578, 240], "espn": [970, 240], "foxnation": [214, 199], "foxsports": [397,
   240], "cbsnews": [420, 240], "abc": [240, 240], "pbs": [504, 240], "pbskids": [240, 240], "mgmplus": [571,
   240], "britbox": [986, 240], "shudder": [1479, 240], "criterionchannel": [235, 240], "kanopy": [743, 217],
-  "hoopla": [593, 234], "fandangoathome": [2380, 240], "xumoplay": [965, 240], "bloomberg": [1300, 240],
+  "hoopla": [593, 234], "fandangoathome": [2430, 240], "xumoplay": [965, 240], "bloomberg": [1300, 240],
   "nfl": [335, 240], "curiositystream": [699, 240], "vix": [647, 240], "univision": [290, 240],
   "telemundo": [284, 240], "globoplay": [1102, 240], "directvstream": [1261, 240], "betplus": [756, 240],
   "stirr": [782, 228], "glasshouse": [203, 234], "zee5": [286, 232], "amazonmusic": [1121, 240], "tunein": [545, 240], "siriusxm": [1547,
