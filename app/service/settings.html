@@ -1882,7 +1882,7 @@ footer a { color: var(--muted); }
   };
   Object.keys(HA_T).forEach(function (k) { T.en[k] = HA_T[k]; });
 
-  var haList = null; // what HA has, read for the lists: [{id, s, u, n}]
+  var haList = null, haVals = {}; // what HA has, by name, read for the lists: [{id, n}]; the values the Home shows
   var HA_GROUPS = [['haLights', /^light\./], ['haSwitches', /^(switch|input_boolean)\./], ['haScenes', /^(scene|script)\./]];
 
   function haNote(text, err) { $('ha-note').textContent = text || ''; $('ha-note').hidden = !text; $('ha-note').className = 'note' + (err ? ' err' : ''); }
@@ -1895,6 +1895,7 @@ footer a { color: var(--muted); }
     if (!cfg.haUrl) { haList = null; return renderHa(); }
     api('GET', '/api/ha/entities', null, function (r, raw) {
       haList = r ? r.entities.sort(function (a, b) { return haName(a.id).toLowerCase() < haName(b.id).toLowerCase() ? -1 : 1; }) : null;
+      haVals = r ? r.states : {};
       if (!r) haNote(t.haNoList + haErr(raw), true);
       renderHa();
       preview();
@@ -1905,8 +1906,7 @@ footer a { color: var(--muted); }
     api('POST', '/api/ha', { show: show }, function (r, raw) {
       if (!r) return haNote(haErr(raw), true);
       cfg = r.config;
-      renderHa();
-      preview();
+      haRead(); // the values of those now shown
     });
   }
 
@@ -1938,7 +1938,7 @@ footer a { color: var(--muted); }
         haShow(show.map(function (x, k) { return k === i ? { id: x.id, name: v } : x; }));
       };
       sub.className = 'sub';
-      sub.textContent = e.id + ' \u00b7 ' + valoreCasa(haOf(e.id), virgola);
+      sub.textContent = e.id + ' \u00b7 ' + valoreCasa(haVals[e.id], virgola);
       name.appendChild(input);
       name.appendChild(sub);
       li.appendChild(name);
@@ -1959,7 +1959,7 @@ footer a { color: var(--muted); }
     (haList || []).forEach(function (e) {
       var kind = e.id.split('.')[0];
       if (!groups[kind]) { groups[kind] = document.createElement('optgroup'); groups[kind].label = kind; }
-      option(groups[kind], e.id, haName(e.id) + ' \u00b7 ' + valoreCasa(e, virgola));
+      option(groups[kind], e.id, haName(e.id));
     });
     Object.keys(groups).sort().forEach(function (k) { addShow.appendChild(groups[k]); });
     (cfg.tiles || []).forEach(function (x) { if (entitaCasa(x)) tiled[entitaCasa(x)] = true; });
@@ -2024,7 +2024,7 @@ footer a { color: var(--muted); }
     show.forEach(function (e, i) {
       if (i) el.appendChild(document.createTextNode(' \u00b7 '));
       var x = document.createElement('span');
-      x.textContent = (e.name || haName(e.id)) + ' ' + valoreCasa(haOf(e.id), virgola);
+      x.textContent = (e.name || haName(e.id)) + ' ' + valoreCasa(haVals[e.id], virgola);
       el.appendChild(x);
     });
   }

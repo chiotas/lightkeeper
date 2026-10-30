@@ -1083,7 +1083,8 @@ function haChecks(done) {
     function (next) { req('GET', '/api/ha/entities', { port: 18590 }, function (st, j, h, raw) {
       assert.equal(st, 200); assert.equal(String(raw).indexOf(TOKEN), -1);
       var sala = j.entities.filter(function (e) { return e.id === 'light.sala'; })[0];
-      assert.deepEqual(sala, { s: 'off', u: '', n: 'Luce sala', id: 'light.sala' }); next(); }); },
+      assert.deepEqual(sala, { id: 'light.sala', n: 'Luce sala' }, 'names only');
+      assert.deepEqual(j.states, {}, 'values only of what the Home shows'); next(); }); },
     function (next) { req('POST', '/api/ha', post({ show: [1, 2, 3, 4, 5].map(function () { return { id: 'sensor.patio' }; }) }), function (st, j) {
       assert.equal(st, 400); assert.equal(j.error, 'invalid: show'); next(); }); },
     function (next) { req('POST', '/api/ha', post({ show: [{ id: 'sensor.patio', name: 'Patio' }, { id: 'binary_sensor.porta', name: '' }] }), function (st, j) {
@@ -1094,7 +1095,10 @@ function haChecks(done) {
       assert.equal(st, 200);
       assert.deepEqual(j.states['sensor.patio'], { s: '21.5', u: '°C', n: 'Patio' });
       assert.equal(j.states['light.sala'].s, 'off'); assert.equal(j.states['binary_sensor.porta'].s, 'unavailable'); assert.ok(j.states['scene.sera']);
-      assert.equal(j.states['switch.presa'], undefined, 'only what the Home shows'); next(); }); },
+      assert.equal(j.states['switch.presa'], undefined, 'only what the Home shows');
+      req('GET', '/api/ha/entities', { port: 18590 }, function (st2, j2) {
+        assert.deepEqual(Object.keys(j2.states).sort(), ['binary_sensor.porta', 'light.sala', 'scene.sera', 'sensor.patio']); next();
+      }); }); },
     // Origins: the Home's file:// page, or a page on the TV's own servers; nothing else.
     function (next) { req('GET', '/api/ha/states', { port: 18590, headers: { Origin: 'http://evil.example' } }, function (st) {
       assert.equal(st, 403);
@@ -1137,11 +1141,14 @@ function haChecks(done) {
     // An HA that connects and does not answer: no values, in HA_TIMEOUT, not later.
     function (next) {
       ha.hang = true;
-      var t0 = Date.now();
-      req('GET', '/api/ha/states', home, function (st, j) {
-        var ms = Date.now() - t0;
-        assert.equal(st, 200); assert.deepEqual(j.states, {}); assert.ok(ms >= 3900 && ms < 6000, ms + ' ms');
-        assert.ok(/home assistant: no answer/.test(logged)); ha.hang = false; next();
+      var t0 = Date.now(), n = ha.calls.length, left = 2;
+      [0, 1].forEach(function () {
+        req('GET', '/api/ha/states', home, function (st, j) {
+          var ms = Date.now() - t0;
+          assert.equal(st, 200); assert.deepEqual(j.states, {}); assert.ok(ms >= 3900 && ms < 6000, ms + ' ms');
+          if (--left) return;
+          assert.ok(/home assistant: no answer/.test(logged)); ha.hang = false; next();
+        });
       });
     },
     // An HA that is off: no values, at once.

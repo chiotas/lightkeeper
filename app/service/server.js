@@ -934,9 +934,13 @@ function haEntity(e) {
 }
 
 // cb({entity: {s, u, n}}) for the entities the Home shows; those HA did not give are missing.
+// One ask at a time, which those coming meanwhile share: an HA that hangs keeps one waiting, not a pile.
+var haWaiting = null;
 function haStates(cb) {
   var ids = haIds(), token = haTokenNow();
   if (!config.haUrl || !token || !ids.length) return cb({});
+  if (haWaiting) return haWaiting.push(cb);
+  haWaiting = [cb];
   haAsk(config.haUrl, token, ids.map(function (id) { return '/api/states/' + id; }), null, function (res) {
     var states = {}, bad = 0;
     res.forEach(function (r, i) {
@@ -946,7 +950,9 @@ function haStates(cb) {
       else if (r.code !== 404) bad = r.code || -1;
     });
     haNote(bad ? haError(bad === -1 ? 0 : bad) : 'answering');
-    cb(states);
+    var waiting = haWaiting;
+    haWaiting = null;
+    waiting.forEach(function (f) { f(states); });
   });
 }
 
@@ -994,7 +1000,9 @@ function haHome(req, res, m, p) {
  *                 change of address can never send the kept token somewhere else
  *   {url: null}   off: the token, the entities and the tiles go
  *   {show: [{id, name}]}  the entities beside the clock, up to four
- * GET /api/ha/entities lists what HA has, to choose from.
+ * GET /api/ha/entities lists what HA has, to choose from: names only, and the values of those
+ * the Home shows. Without a PIN anyone on the network can open this page, and HA's values (who
+ * is home, a door) are not theirs to read through the TV.
  */
 function haSettings(req, res, m, p) {
   if (m === 'GET' && p === '/api/ha/entities') {
@@ -1004,11 +1012,10 @@ function haSettings(req, res, m, p) {
       var list = null;
       if (r[0].code === 200) { try { list = JSON.parse(r[0].body); } catch (e) {} }
       if (!Array.isArray(list)) return send(res, 502, { ok: false, error: haError(r[0].code === 200 ? 0 : r[0].code) });
-      send(res, 200, { ok: true, entities: list.filter(function (e) { return e && HA_ENTITY.test(e.entity_id || ''); }).map(function (e) {
-        var x = haEntity(e);
-        x.id = e.entity_id;
-        return x;
-      }) });
+      var ids = haIds(), states = {};
+      list = list.filter(function (e) { return e && HA_ENTITY.test(e.entity_id || ''); });
+      list.forEach(function (e) { if (ids.indexOf(e.entity_id) !== -1) states[e.entity_id] = haEntity(e); });
+      send(res, 200, { ok: true, entities: list.map(function (e) { return { id: e.entity_id, n: haEntity(e).n }; }), states: states });
     });
   }
   if (m !== 'POST' || p !== '/api/ha') return send(res, 404, { ok: false, error: 'not found' });
