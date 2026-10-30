@@ -64,7 +64,8 @@ header.dx #meteo { -webkit-justify-content: flex-end; justify-content: flex-end;
 #meteo { margin-top: 18px; height: 40px; font-size: 34px; font-weight: 300; opacity: .9; display: flex; align-items: center; }
 #meteo svg { width: 34px; height: 34px; margin-left: 14px; }
 nav { bottom: 104px; display: flex; align-items: flex-end; transition: -webkit-transform .2s, transform .2s; }
-nav a { position: relative; margin-right: 72px; font-size: 44px; font-weight: 400; font-weight: 380; letter-spacing: .01em; opacity: .72; cursor: pointer; transition: opacity .2s; white-space: nowrap; }
+/* Each tile on a layer of its own: one that fades leaves the other tiles, and the picture behind them, as they are. */
+nav a { position: relative; margin-right: 72px; font-size: 44px; font-weight: 400; font-weight: 380; letter-spacing: .01em; opacity: .72; cursor: pointer; transition: opacity .2s; white-space: nowrap; will-change: opacity; }
 nav a.sel { opacity: 1; font-weight: 500; font-weight: 450; }
 nav a.sel::after {
   content: ""; position: absolute; left: 0; bottom: -20px;
