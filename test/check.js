@@ -126,8 +126,10 @@ assert.deepEqual(s.validate({ tiles: [{ id: 'com.amazoff.patcher', title: 'AmazO
   { tiles: [{ id: 'com.amazoff.patcher', title: 'AmazOff', logo: 'xbox' }] });
 assert.deepEqual(s.validate({ tiles: [{ id: 'web.k3x9', title: 'x', url: 'https://a.it', logo: 'hdmi' }] }, keys).tiles[0].logo, 'hdmi');
 assert.deepEqual(s.validate({ tiles: [{ id: 'com.webos.app.hdmi1', title: 'x', device: 'ps5', logo: 'arte' }] }, keys).tiles[0].logo, 'arte');
-['nope', '', 'XBOX', '__proto__', 'toString', 3, null].forEach(function (v) {
-  assert.equal(s.validate({ tiles: [{ id: 'netflix', title: 'x', logo: v }] }, keys), 'tiles', String(v));
+// One the server does not know, such as an uploaded logo taken away meanwhile, is dropped and the tile kept:
+// refusing it blocked every save of the tiles until the page was reloaded.
+['nope', '', 'XBOX', '__proto__', 'toString', 'up-00000000', 3, null].forEach(function (v) {
+  assert.deepEqual(s.validate({ tiles: [{ id: 'netflix', title: 'x', logo: v }] }, keys), { tiles: [{ id: 'netflix', title: 'x' }] }, String(v));
 });
 assert.ok(Object.keys(s.CATALOG).length > 100 && s.CATALOG.hdmi && s.CATALOG.netflix && s.CATALOG.arte);
 // Every background the app carries: 1920 × 1080 with a 384 × 216 copy, a credit, and a link for those not its own.
@@ -766,12 +768,12 @@ function httpChecks() {
         assert.equal(st2, 200); assert.equal(h2['content-type'], 'image/png'); assert.equal(raw2.length, logoPng.length);
         req('GET', '/mylogos/..%2Fconfig.json', {}, function (st3) { assert.equal(st3, 404); next(); });
       }); }); },
-    // Chosen for a tile, an input too; an id it does not have is refused.
+    // Chosen for a tile, an input too; an id it does not have is dropped, the tile kept.
     function (next) { req('GET', '/api/config', {}, function (st, j) {
       var tiles = j.tiles.slice(0, 2).concat([{ id: 'com.webos.app.hdmi1', title: 'HDMI 1' }]);
       tiles[0].logo = logoA; tiles[2].logo = logoA;
-      req('POST', '/api/config', json({ tiles: [{ id: 'netflix', title: 'Netflix', logo: 'up-00000000' }] }), function (st2) {
-        assert.equal(st2, 400);
+      req('POST', '/api/config', json({ tiles: [{ id: 'netflix', title: 'Netflix', logo: 'up-00000000' }] }), function (st2, j2) {
+        assert.equal(st2, 200); assert.deepEqual(j2.config.tiles, [{ id: 'netflix', title: 'Netflix' }]);
         req('POST', '/api/config', json({ tiles: tiles }), function (st3, j3) {
           assert.equal(st3, 200); assert.equal(j3.config.tiles[0].logo, logoA); assert.equal(j3.config.tiles[2].logo, logoA); next();
         });
@@ -783,6 +785,9 @@ function httpChecks() {
       assert.ok(j.config.tiles.every(function (t) { return t.logo === undefined; }));
       assert.deepEqual(fs.readdirSync(path.join(env.LIGHTKEEPER_DATA, 'logos')), []);
       req('GET', '/mylogos/' + logoA + '.png', {}, function (st2) { assert.equal(st2, 404); next(); }); }); },
+    // A second settings page still showing the logo saves its tiles all the same, without it.
+    function (next) { req('POST', '/api/config', json({ tiles: [{ id: 'netflix', title: 'Netflix', logo: logoA }, { id: 'youtube.leanback.v4', title: 'YouTube' }] }), function (st, j) {
+      assert.equal(st, 200); assert.deepEqual(j.config.tiles, [{ id: 'netflix', title: 'Netflix' }, { id: 'youtube.leanback.v4', title: 'YouTube' }]); next(); }); },
     function (next) {
       fs.writeFileSync(RUNNING, 'netflix\n');
       req('GET', '/api/open', { headers: { Origin: 'null' } }, function (st, j) {

@@ -455,11 +455,10 @@ function validate(body, keyNames) {
           if (!isWeb(t.id) || !webUrl(t.url)) return 'tiles';
           tile.url = t.url;
         }
-        // A logo or icon chosen for the tile; without one, Lightkeeper picks it.
-        if (t.logo !== undefined) {
-          if (typeof t.logo !== 'string' || !(has(CATALOG, t.logo) || has(myLogos(), t.logo))) return 'tiles';
-          tile.logo = t.logo;
-        }
+        // A logo or icon chosen for the tile; without one, Lightkeeper picks it. One it does not know,
+        // such as an uploaded logo taken away in another page or lost going back to 1.0.9, is dropped:
+        // refusing it refused every save of the tiles.
+        if (typeof t.logo === 'string' && (has(CATALOG, t.logo) || has(myLogos(), t.logo))) tile.logo = t.logo;
         tiles.push(tile);
       }
       out[k] = tiles;
