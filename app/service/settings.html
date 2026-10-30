@@ -474,6 +474,11 @@ footer a { color: var(--muted); }
           <input type="checkbox" class="switch" id="power" role="switch">
         </div>
         <div class="row">
+          <label for="tv-input"><span data-t="tvInput">Among the TV's inputs</span><span class="sub" data-t="tvInputLede">Puts Lightkeeper in the TV's list of inputs. A TV that starts from scratch, as after a power cut, opens the input used last: Lightkeeper, if you were on it. Experimental.</span></label>
+          <input type="checkbox" class="switch" id="tv-input" role="switch">
+        </div>
+        <p class="note" id="input-note" aria-live="polite"></p>
+        <div class="row">
           <div class="label"><span data-t="saver">Screen saver</span><span class="sub" id="saver-state"></span></div>
           <button class="btn" type="button" id="saver" data-t="saverPause">Pause for an hour</button>
         </div>
@@ -593,6 +598,8 @@ footer a { color: var(--muted); }
       hideGearLede: 'The settings stay at ', hideGearEnd: ', from a phone or computer.',
       openApps: 'Open apps button', openAppsLede: 'At the end of the row: it lists the apps open on the TV and closes them.',
       power: 'Open at power on', powerLede: 'When the TV comes on over an input or LG\'s Home.', more: 'PIN',
+      tvInput: 'Among the TV\'s inputs', tvInputLede: 'Puts Lightkeeper in the TV\'s list of inputs. A TV that starts from scratch, as after a power cut, opens the input used last: Lightkeeper, if you were on it. Experimental.',
+      inputActive: 'In the TV\'s list of inputs.', inputRefused: 'This TV did not take Lightkeeper as an input. Nothing was changed on it.',
       saver: 'Screen saver', saverPause: 'Pause for an hour', saverResume: 'Resume now', saverOn: 'On, as LG set it.',
       saverUntil: 'Paused until ', saverLede: 'LG\'s screen saver keeps still pictures from marking an OLED screen. Pause it while you try things out; it comes back by itself.',
       pin: 'PIN for this page', pinOn: 'Asked before any change here.',
@@ -1631,6 +1638,17 @@ footer a { color: var(--muted); }
   }
   $('key').onchange = function () { save({ key: this.value }); };
   $('power').onchange = function () { save({ openAtPowerOn: this.checked }); };
+  // As the TV left it: a TV that refuses it, or does not answer, puts the switch back.
+  function inputNote(state) {
+    var n = $('input-note');
+    n.textContent = state === 'active' ? t.inputActive : state === 'refused' ? t.inputRefused : state === 'failed' ? t.failed : '';
+    n.className = 'note' + (state === 'refused' || state === 'failed' ? ' err' : '');
+  }
+  $('tv-input').onchange = function () {
+    var box = this;
+    box.disabled = true;
+    save({ tvInput: box.checked }, function () { box.disabled = false; box.checked = !!cfg.tvInput; inputNote(cfg.inputStatus); });
+  };
   $('open-apps').onchange = function () { save({ openApps: this.checked }); };
   $('hide-gear').onchange = function () { save({ hideGear: this.checked }); };
   $('city-time').onchange = function () { save({ cityTime: this.checked }); };
@@ -1851,6 +1869,8 @@ footer a { color: var(--muted); }
     radios('size', size, function (v) { try { localStorage.setItem('size', v); } catch (e) {} });
     $('veil').value = cfg.veil;
     $('power').checked = cfg.openAtPowerOn;
+    $('tv-input').checked = !!cfg.tvInput;
+    inputNote(cfg.inputStatus);
     $('open-apps').checked = !!cfg.openApps;
     $('two-rows').checked = !!cfg.twoRows;
     $('hide-gear').checked = !!cfg.hideGear;

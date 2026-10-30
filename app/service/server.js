@@ -137,6 +137,8 @@ var DEFAULTS = {
   veil: 80,
   key: 'home',
   openAtPowerOn: true,
+  // Lightkeeper among the TV's inputs, off as up to 1.0.11: then eim is never asked.
+  tvInput: false,
   port: DEFAULT_PORT,
   pin: null
 };
@@ -228,6 +230,7 @@ function publicConfig() {
   c.saverPausedUntil = saverUntil > Date.now() ? saverUntil : 0;
   c.started = STARTED;
   c.backgroundNow = sessionBackground();
+  c.inputStatus = inputStatus;
   return c;
 }
 
@@ -414,6 +417,7 @@ function validate(body, keyNames) {
     else if (k === 'rowBreak') { if (v !== null && (typeof v !== 'number' || v % 1 || v < 0 || v > MAX_TILES)) return 'rowBreak'; out[k] = v; }
     else if (k === 'veil') { if (!num(v, 0, 100)) return 'veil'; out[k] = Math.round(v); }
     else if (k === 'openAtPowerOn') { if (typeof v !== 'boolean') return 'openAtPowerOn'; out[k] = v; }
+    else if (k === 'tvInput') { if (typeof v !== 'boolean') return 'tvInput'; out[k] = v; }
     // The Home's open apps button; off, as before 1.0.7, and then the TV is not even asked.
     else if (k === 'openApps') { if (typeof v !== 'boolean') return 'openApps'; out[k] = v; }
     // The tile selected when the Home opens: the last one opened, as up to 1.0.8, or the first.
@@ -662,6 +666,63 @@ function keyState(key, changed, cb) {
   });
 }
 
+/* ---------- Lightkeeper among the TV's inputs ---------- */
+
+/*
+ * The call Hearth makes (src/lib/tvinput.ts), for an app whose appinfo.json has
+ * supportGIP: eim's addDevice, and the same with deleteDevice to take it out.
+ * Without pigImage eim crashes; mvpdIcon is needed on older webOS. Picked once in
+ * the TV's list of inputs, a TV started from scratch opens Lightkeeper by itself,
+ * as tried on a C1 with webOS 6.5.3 (30/10). A webOS 3.4 TV refused it to Hearth.
+ */
+var INPUT = { appId: APP_ID, pigImage: '', mvpdIcon: '', label: 'Lightkeeper', description: 'Lightkeeper home screen' };
+// 'off', 'active', 'refused' (asked to add, not there after) or 'failed' (asked to take out, still there).
+var inputStatus = 'off';
+
+// Whether eim lists Lightkeeper among the inputs: cb(true or false), or cb(null) when it does not answer.
+function inputListed(cb) {
+  luna('com.webos.service.eim/getAllInputStatus', {}, function (r) {
+    cb(r && r.devices && r.devices.some ? r.devices.some(function (d) { return d && d.appId === APP_ID; }) : null);
+  });
+}
+
+// Added or taken out, then checked in eim's list; a TV that does not list it is taken at its answer.
+// A refused add is taken out again, so nothing is left half done. cb(state), as inputStatus.
+function applyInput(on, cb) {
+  luna('com.webos.service.eim/' + (on ? 'addDevice' : 'deleteDevice'), INPUT, function (r) {
+    inputListed(function (listed) {
+      var there = listed === null ? (on ? !!r : !r) : listed;
+      if (there === on) return cb(on ? 'active' : 'off');
+      if (!on) return cb('failed');
+      luna('com.webos.service.eim/deleteDevice', INPUT, function () { cb('refused'); });
+    });
+  });
+}
+
+// The status kept, and whether Lightkeeper is among the inputs after it: what the switch shows.
+function setInputStatus(state) {
+  if (state !== inputStatus) log('input: ' + state);
+  inputStatus = state;
+  return state === 'active' || state === 'failed';
+}
+
+/*
+ * Put back at each start while on, as the key is: an update or the TV may have taken
+ * it out. Not there and refused now, the switch goes off. Luna can be slow after a boot.
+ */
+function checkInput(tries) {
+  if (!config.tvInput) return;
+  inputListed(function (listed) {
+    if (listed === null && tries < 10) return setTimeout(function () { checkInput(tries + 1); }, 15000);
+    if (listed !== false) return;
+    applyInput(true, function (state) {
+      if (setInputStatus(state)) return;
+      config.tvInput = false;
+      try { saveConfig(); } catch (e) { log('config: ' + e.message); }
+    });
+  });
+}
+
 /* ---------- updates ---------- */
 
 // The newest release, from an address that does not change, and the only place
@@ -811,11 +872,16 @@ function pickTiles(cb) {
 
 function uninstall(removeApp, cb) {
   applyKey('none', function () {
-    try { fs.unlinkSync(HOOK); } catch (e) {}
-    try { rmrf(DATA); } catch (e) { log('uninstall: ' + e.message); }
-    log('uninstalled');
-    if (!removeApp) return cb();
-    luna('com.webos.appInstallService/dev/remove', { id: APP_ID }, function () { cb(); });
+    // Out of the TV's inputs, before the app goes; eim is not asked when it was never put there.
+    var input = (config || loadConfig()).tvInput ? applyInput : function (on, done) { done('off'); };
+    input(false, function (state) {
+      setInputStatus(state);
+      try { fs.unlinkSync(HOOK); } catch (e) {}
+      try { rmrf(DATA); } catch (e) { log('uninstall: ' + e.message); }
+      log('uninstalled');
+      if (!removeApp) return cb();
+      luna('com.webos.appInstallService/dev/remove', { id: APP_ID }, function () { cb(); });
+    });
   });
 }
 
@@ -1156,17 +1222,22 @@ function handle(req, res) {
       }
       movePort(change.port, function (err) {
         if (err) return send(res, 409, { ok: false, error: err });
-        // A picture uploaded is chosen as such; one the app carries leaves the pictures in the list.
-        var mine = has(change, 'preset') && MINE_ID.test(change.preset) ? change.preset : null;
-        if (mine) delete change.preset;
-        Object.keys(change).forEach(function (k) { config[k] = change[k]; });
-        if (mine) config.background = { custom: true, id: mine, rev: (config.background.rev || 0) + 1 };
-        else if (has(change, 'preset') && config.background.custom) config.background = { custom: false, rev: (config.background.rev || 0) + 1 };
-        try { saveConfig(); } catch (e) { return send(res, 500, { ok: false, error: e.message }); }
-        if (!has(change, 'key')) return send(res, 200, { ok: true, config: publicConfig(), keyStatus: keyStatus });
-        applyKey(config.key, function (state) {
-          setKeyStatus(state, true);
-          send(res, 200, { ok: true, config: publicConfig(), keyStatus: keyStatus });
+        // Lightkeeper among the inputs: the TV is asked first, and the switch saved as the TV left it.
+        var input = has(change, 'tvInput') && change.tvInput !== config.tvInput ? applyInput : function (on, done) { done(); };
+        input(change.tvInput, function (state) {
+          if (state) change.tvInput = setInputStatus(state);
+          // A picture uploaded is chosen as such; one the app carries leaves the pictures in the list.
+          var mine = has(change, 'preset') && MINE_ID.test(change.preset) ? change.preset : null;
+          if (mine) delete change.preset;
+          Object.keys(change).forEach(function (k) { config[k] = change[k]; });
+          if (mine) config.background = { custom: true, id: mine, rev: (config.background.rev || 0) + 1 };
+          else if (has(change, 'preset') && config.background.custom) config.background = { custom: false, rev: (config.background.rev || 0) + 1 };
+          try { saveConfig(); } catch (e) { return send(res, 500, { ok: false, error: e.message }); }
+          if (!has(change, 'key')) return send(res, 200, { ok: true, config: publicConfig(), keyStatus: keyStatus });
+          applyKey(config.key, function (state2) {
+            setKeyStatus(state2, true);
+            send(res, 200, { ok: true, config: publicConfig(), keyStatus: keyStatus });
+          });
         });
       });
     });
@@ -1362,6 +1433,7 @@ function movePort(port, cb) {
 
 function start() {
   config = loadConfig();
+  if (config.tvInput) inputStatus = 'active';
   try { migrate(); } catch (e) { log('background.jpg: ' + e.message); }
   // While another program has the port, the next free one of the ten after it.
   listen(config.port, Math.min(config.port + 10, 65535), function (e, server, port) {
@@ -1393,6 +1465,7 @@ function start() {
       go();
     });
   })(0);
+  checkInput(0);
   setInterval(watchApp, 30000);
   // Stopped by the boot hook (an update, a new start): the screen saver watch goes too.
   process.on('SIGTERM', function () { process.exit(0); });

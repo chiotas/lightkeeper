@@ -7,7 +7,21 @@ echo "$uri $params" >> "$F/calls.log"
 case "$uri" in
   */listApps) sed "s#@F@#$F#g" "$F/apps.json" ;;
   */dev/install) echo '{"returnValue":true,"id":"io.github.chiotas.lightkeeper","state":"installed"}' ;;
-  */getAllInputStatus) echo '{"returnValue":true,"devices":[{"id":"HDMI_1","label":"HDMI 1","appId":"com.webos.app.hdmi1"},{"id":"HDMI_2","label":"HDMI 2","appId":"com.webos.app.hdmi2"},{"id":"HDMI_3","label":"Game console","appId":"com.webos.app.hdmi3"}]}' ;;
+  # The apps added as inputs, one id per line in $F/inputs, listed as a C1 with webOS 6.5.3 lists them.
+  */getAllInputStatus)
+    printf '{"returnValue":true,"devices":[{"id":"HDMI_1","label":"HDMI 1","appId":"com.webos.app.hdmi1"},{"id":"HDMI_2","label":"HDMI 2","appId":"com.webos.app.hdmi2"},{"id":"HDMI_3","label":"Game console","appId":"com.webos.app.hdmi3"}'
+    [ -s "$F/inputs" ] && sed 's/.*/,{"id":"MVPD_IP-&","label":"Lightkeeper","appId":"&"}/' "$F/inputs" | tr -d '\n'
+    echo ']}' ;;
+  # With $F/refuse-input the TV refuses: empty, with returnValue false; with "quietly" in it, true and nothing added.
+  */addDevice|*/deleteDevice)
+    id=$(printf %s "$params" | sed -n 's/.*"appId": *"\([^"]*\)".*/\1/p')
+    if [ "${uri##*/}" = addDevice ] && [ -f "$F/refuse-input" ]; then
+      if [ -s "$F/refuse-input" ]; then echo '{"returnValue":true}'; else echo '{"returnValue":false,"errorText":"not supported"}'; fi
+    else
+      [ -f "$F/inputs" ] && { grep -vx "$id" "$F/inputs" > "$F/inputs.new"; mv "$F/inputs.new" "$F/inputs"; }
+      [ "${uri##*/}" = addDevice ] && echo "$id" >> "$F/inputs"
+      echo '{"returnValue":true}'
+    fi ;;
   */getConfigs)
     if [ -f "$F/chain-has-filter" ]; then
       echo "{\"returnValue\":true,\"configs\":{\"com.webos.surfacemanager.keyFilters\":[{\"file\":\"${LIGHTKEEPER_TVWEB:-$F/tvweb}/remotekeys-filter.js\",\"handler\":\"handleGlasshouseKeys\"}]}}"

@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.12 (unreleased)
+
+- **Lightkeeper among the TV's inputs**, as asked on Reddit, with *Among the TV's inputs* under *Remote and power* in the settings, off until you turn it on. On, Lightkeeper asks the TV's input manager to add it to the list of inputs, with the call the launcher Hearth makes, then looks for itself in the list. A TV that does not take it leaves the switch off, the settings say *This TV did not take Lightkeeper as an input*, and whatever the TV took is taken out again. Picked once in that list, Lightkeeper is the input the TV opens when it starts from scratch, as after a power cut, if it was the last one used. Turned off, and when Lightkeeper is removed, it is taken out of the list before the app goes. While it is on, each start of Lightkeeper's server puts it back if the list no longer has it, in case an update takes it out. Off, Lightkeeper asks the input manager to add or take out nothing, as up to 1.0.11; the package now has `supportGIP` in its `appinfo.json`, which the call needs, as Hearth's changelog says. Turn it off before going back to an earlier version, which does not know about it.
+  - Tried on a C1 with webOS 6.5.3, with a test build and the same call made by hand: the TV took it and listed Lightkeeper among its inputs. Rebooted on that input, the TV opened Lightkeeper by itself: it was in front at the first look of the start-up script, 34 seconds in. From standby it was in front after 4.8 seconds.
+  - Tried against the stand-in TV of the checks: on, off, a refusal, a start that puts it back, and removal.
+  - Not yet tried on a TV: the switch itself, a start from scratch on an HDMI input, an update, removing Lightkeeper, and what shows on screen before Lightkeeper at a start from scratch. On webOS 4 Lightkeeper's input has not been tried; a user reports that Hearth's works on webOS 4.10, and Hearth has a report of a webOS 3.4 TV that refused it.
+
 ## 1.0.11 (30 October 2026)
 
 - **The Home shows again on webOS 3.** With 1.0.10 it stayed black, as reported on Reddit from a TV with webOS 3.4. A line added in 1.0.10, which places the two rows again once the typeface is loaded, takes `document.fonts.ready` for a promise; in an engine where it is still a method, as in an early draft of the standard, that throws, and the Home stopped before drawing a tile or the picture. In a computer's browser made to have `ready` as a method, 1.0.10 stays black with that error and 1.0.11 draws the Home; with `ready` as a promise, as on newer TVs, nothing changes. Not yet tried on a webOS 3 TV.

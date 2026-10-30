@@ -43,6 +43,7 @@ fs.writeFileSync(env.LIGHTKEEPER_HOOK, '');
 Object.keys(env).forEach(function (k) { process.env[k] = env[k]; });
 try { fs.unlinkSync(path.join(FAKE, 'calls.log')); } catch (e) {}
 try { fs.unlinkSync(path.join(FAKE, 'chain-has-filter')); } catch (e) {}
+['inputs', 'refuse-input'].forEach(function (f) { try { fs.unlinkSync(path.join(FAKE, f)); } catch (e) {} });
 
 var s = require('../app/service/server.js');
 
@@ -96,6 +97,9 @@ assert.equal(s.validate({ backgroundPool: ['night', 'custom'] }, keys), 'backgro
 assert.deepEqual(s.validate({ backgroundPool: null }, keys), { backgroundPool: null });
 ['yes', 1].forEach(function (v) { assert.equal(s.validate({ randomBackground: v }, keys), 'randomBackground'); });
 [['nope'], ['night', 'night'], 'night', {}].forEach(function (v) { assert.equal(s.validate({ backgroundPool: v }, keys), 'backgroundPool', JSON.stringify(v)); });
+assert.equal(s.DEFAULTS.tvInput, false); // not among the TV's inputs until turned on
+assert.deepEqual(s.validate({ tvInput: true }, keys), { tvInput: true });
+['true', 1, null].forEach(function (v) { assert.equal(s.validate({ tvInput: v }, keys), 'tvInput', JSON.stringify(v)); });
 assert.deepEqual(s.validate({ openApps: true }, keys), { openApps: true });
 assert.equal(s.validate({ openApps: 'true' }, keys), 'openApps');
 assert.deepEqual(s.validate({ tiles: [{ id: 'netflix', title: '  Netflix \n' }] }, keys), { tiles: [{ id: 'netflix', title: 'Netflix' }] });
@@ -847,7 +851,7 @@ function httpChecks() {
     if (i === steps.length) {
       child.removeAllListeners('exit');
       child.kill();
-      return portChecks(function () { updateChecks(function () { migrationChecks(function () { console.log('check: all good'); }); }); });
+      return portChecks(function () { updateChecks(function () { migrationChecks(function () { inputChecks(function () { console.log('check: all good'); }); }); }); });
     }
     steps[i](function () { run(i + 1); });
   }
@@ -1012,4 +1016,105 @@ function migrationChecks(done) {
       });
     });
   }, 700);
+}
+
+// Lightkeeper among the TV's inputs. Off by default, eim is never asked to add or take out, by
+// every check before this one and by --uninstall. On, it is added the way Hearth does it and listed;
+// off again, taken out. Refused, with an error or by not listing it, the switch stays off and nothing
+// is left in eim. While on, a start puts it back when it is gone, as an update might leave it, and
+// turns the switch off when the TV refuses it then. --uninstall takes it out before the app goes.
+function inputChecks(done) {
+  var server = path.join(__dirname, '..', 'app', 'service', 'server.js');
+  var inputs = path.join(FAKE, 'inputs'), refuse = path.join(FAKE, 'refuse-input'), calls = path.join(FAKE, 'calls.log');
+  var ienv = {};
+  Object.keys(process.env).forEach(function (k) { ienv[k] = process.env[k]; });
+  ienv.LIGHTKEEPER_PORT = '18590';
+  ienv.LIGHTKEEPER_DATA = path.join(tmp, 'data-input');
+  ienv.LIGHTKEEPER_PORT_FILE = path.join(tmp, 'port-5');
+  ienv.LIGHTKEEPER_HOOK = path.join(tmp, 'hook-input');
+  var saved = function () { return JSON.parse(fs.readFileSync(path.join(ienv.LIGHTKEEPER_DATA, 'config.json'), 'utf8')); };
+  var listed = function () { try { return fs.readFileSync(inputs, 'utf8').split('\n').indexOf(LK) !== -1; } catch (e) { return false; } };
+  var eim = function () { return fs.readFileSync(calls, 'utf8').split('\n').filter(function (l) { return /eim\/(addDevice|deleteDevice)/.test(l); }); };
+  var set = function (on, cb) { req('POST', '/api/config', { port: 18590, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tvInput: on }) }, cb); };
+  function start(cb) {
+    var child = spawn(process.execPath, [server], { env: ienv });
+    child.on('exit', function (code) { if (code) { console.error('input server exited ' + code); process.exit(1); } });
+    // Listening once it has written its port.
+    (function wait(n) { setTimeout(function () { if (fs.existsSync(ienv.LIGHTKEEPER_PORT_FILE) || !n) cb(child); else wait(n - 1); }, 100); })(40);
+  }
+  function stop(child) { child.removeAllListeners('exit'); child.kill(); try { fs.unlinkSync(ienv.LIGHTKEEPER_PORT_FILE); } catch (e) {} }
+  function uninstall() { require('child_process').execFileSync(process.execPath, [server, '--uninstall'], { env: ienv }); }
+  // A start's own check, done when the TV has been asked: polled, as it runs after the server listens.
+  function until(test, cb) { (function poll(n) { if (test() || !n) return cb(); setTimeout(function () { poll(n - 1); }, 100); })(40); }
+
+  assert.deepEqual(eim(), [], 'eim asked while the switch was off');
+  start(function (a) {
+    req('GET', '/api/config', { port: 18590 }, function (st, j) {
+      assert.equal(st, 200); assert.equal(j.tvInput, false); assert.equal(j.inputStatus, 'off');
+      set(true, function (st1, j1) {
+        assert.equal(st1, 200); assert.equal(j1.config.tvInput, true); assert.equal(j1.config.inputStatus, 'active');
+        assert.ok(listed()); assert.equal(saved().tvInput, true);
+        assert.deepEqual(JSON.parse(eim()[0].replace(/^\S+ /, '')),
+          { appId: LK, pigImage: '', mvpdIcon: '', label: 'Lightkeeper', description: 'Lightkeeper home screen' });
+        set(false, function (st2, j2) {
+          assert.equal(st2, 200); assert.equal(j2.config.tvInput, false); assert.equal(j2.config.inputStatus, 'off');
+          assert.ok(!listed()); assert.ok(/deleteDevice/.test(eim().pop()));
+          fs.writeFileSync(refuse, '');
+          set(true, function (st3, j3) {
+            assert.equal(st3, 200); assert.equal(j3.config.tvInput, false); assert.equal(j3.config.inputStatus, 'refused');
+            assert.ok(!listed()); assert.equal(saved().tvInput, false);
+            fs.writeFileSync(refuse, 'quietly');
+            set(true, function (st4, j4) {
+              assert.equal(j4.config.tvInput, false); assert.equal(j4.config.inputStatus, 'refused');
+              assert.ok(!listed()); assert.ok(/deleteDevice/.test(eim().pop()), 'taken out after an add the TV did not list');
+              fs.unlinkSync(refuse);
+              set(true, function (st5, j5) {
+                assert.equal(j5.config.inputStatus, 'active'); assert.ok(listed());
+                stop(a);
+                fs.writeFileSync(inputs, ''); // gone, as an update might leave it
+                var before = eim().length;
+                start(function (b) {
+                  until(function () { return listed(); }, function () {
+                    assert.ok(listed(), 'put back at the start'); assert.equal(eim().length, before + 1);
+                    stop(b);
+                    before = eim().length;
+                    start(function (c) { // there already: eim is not asked again
+                      setTimeout(function () {
+                        assert.equal(eim().length, before);
+                        stop(c);
+                        fs.writeFileSync(inputs, '');
+                        fs.writeFileSync(refuse, '');
+                        start(function (d) {
+                          until(function () { return saved().tvInput === false; }, function () {
+                            req('GET', '/api/config', { port: 18590 }, function (st6, j6) {
+                              assert.equal(j6.tvInput, false); assert.equal(j6.inputStatus, 'refused'); assert.ok(!listed());
+                              stop(d);
+                              fs.unlinkSync(refuse);
+                              // --uninstall: taken out while on; eim not asked while off.
+                              fs.writeFileSync(path.join(ienv.LIGHTKEEPER_DATA, 'config.json'), JSON.stringify({ tvInput: true }));
+                              fs.writeFileSync(inputs, LK + '\n');
+                              uninstall();
+                              assert.ok(!listed()); assert.ok(/deleteDevice/.test(eim().pop()));
+                              assert.ok(!fs.existsSync(ienv.LIGHTKEEPER_DATA));
+                              assert.ok(/appInstallService\/dev\/remove/.test(fs.readFileSync(calls, 'utf8')));
+                              fs.mkdirSync(ienv.LIGHTKEEPER_DATA);
+                              fs.writeFileSync(path.join(ienv.LIGHTKEEPER_DATA, 'config.json'), JSON.stringify({ tvInput: false }));
+                              before = eim().length;
+                              uninstall();
+                              assert.equal(eim().length, before, 'eim asked by --uninstall with the switch off');
+                              done();
+                            });
+                          });
+                        });
+                      }, 700);
+                    });
+                  });
+                });
+              });
+            });
+          });
+        });
+      });
+    });
+  });
 }
