@@ -45,6 +45,8 @@ var CONFIG = path.join(DATA, 'config.json');
 // Up to 1.0.7 there was one, background.jpg, moved into the list at start (migrate).
 var MINE = path.join(DATA, 'backgrounds');
 var MINE_ID = /^my-[0-9a-f]{8}$/;
+// A copy of the pictures the Home may show first, as own/<id>.jpg beside its page (syncOwn).
+var OWN = process.env.LIGHTKEEPER_OWN || path.join(APP_DIR, 'own');
 // Left free where DATA is after a picture is saved, for what else the TV keeps there,
 // its database, logs and settings. On a C1 with webOS 6.5.3 (26/10) /var/lib/lightkeeper
 // is on an overlay of 739536 KB, 391944 KB free: 64 MB keeps 9% of it, and leaves about
@@ -280,9 +282,44 @@ function migrate() {
   log('background.jpg is now backgrounds/' + id + '.jpg');
 }
 
-// Bytes free where DATA is, from df: node has no statfs before 18. cb(null) when it cannot tell.
-function freeSpace(cb) {
-  var dir = DATA;
+/*
+ * The Home loads the app's own backgrounds as files beside its page, at once; an uploaded
+ * picture came from this server, which at power on is up well after the Home is on screen
+ * (on a C1 with webOS 6.5.3, 30/10: the Home on screen 27.6 s after a restart, this server
+ * 11 to 12 s later), so until then the Home stayed black. It now looks first for a copy in
+ * the app, own/<id>.jpg: the chosen picture and, with a random background, the one picked
+ * for this time the TV is on. Anything else there goes. Made again at each start, in case an
+ * update of the app emptied its folder, and after each change; taken away with the app.
+ * Never at the cost of MIN_FREE where the app is: without a copy, the Home asks this server,
+ * as up to 1.0.13.
+ */
+function ownPath(id) { return path.join(OWN, id + '.jpg'); }
+
+function syncOwn() {
+  freeSpace(function (free) {
+    var b = config.background;
+    var want = [b.custom ? b.id : null, sessionBackground()].filter(function (id, i, all) {
+      return MINE_ID.test(id || '') && all.indexOf(id) === i && fs.existsSync(minePath(id));
+    });
+    try {
+      (fs.existsSync(OWN) ? fs.readdirSync(OWN) : []).forEach(function (f) {
+        if (want.indexOf(f.replace(/\.jpg$/, '')) === -1) fs.unlinkSync(path.join(OWN, f));
+      });
+      want.forEach(function (id) {
+        if (fs.existsSync(ownPath(id))) return;
+        var data = fs.readFileSync(minePath(id));
+        if (free === null || free - data.length < MIN_FREE) return log('no copy of ' + id + ' for the Home: ' + (free === null ? 'free space unknown' : free + ' bytes free'));
+        if (!fs.existsSync(OWN)) fs.mkdirSync(OWN, 493);
+        writeAtomic(ownPath(id), data, 420); // readable by the Home, which does not run as root
+        free -= data.length;
+      });
+    } catch (e) { log('copies for the Home: ' + e.message); }
+  }, APP_DIR);
+}
+
+// Bytes free where DATA is, or `where`, from df: node has no statfs before 18. cb(null) when it cannot tell.
+function freeSpace(cb, where) {
+  var dir = where || DATA;
   while (!fs.existsSync(dir) && path.dirname(dir) !== dir) dir = path.dirname(dir);
   execFile(DF, ['-k', dir], { timeout: 5000 }, function (err, out) {
     // After the header, wrapped or not: filesystem, size, used, available.
@@ -336,6 +373,7 @@ function sessionBackground() {
   bgSession = { mark: mark, now: pickBackground(pool, bgSession.now) };
   try { writeAtomic(BG_SESSION, JSON.stringify(bgSession) + '\n'); } catch (e) {}
   log('background for this time the TV is on: ' + bgSession.now);
+  syncOwn();
   return bgSession.now;
 }
 
@@ -881,6 +919,7 @@ function uninstall(removeApp, cb) {
       setInputStatus(state);
       try { fs.unlinkSync(HOOK); } catch (e) {}
       try { rmrf(DATA); } catch (e) { log('uninstall: ' + e.message); }
+      try { rmrf(OWN); } catch (e) {} // not the TV installer's files: not left to it to remove
       log('uninstalled');
       if (!removeApp) return cb();
       luna('com.webos.appInstallService/dev/remove', { id: APP_ID }, function () { cb(); });
@@ -1471,6 +1510,7 @@ function handle(req, res) {
           if (mine) config.background = { custom: true, id: mine, rev: (config.background.rev || 0) + 1 };
           else if (has(change, 'preset') && config.background.custom) config.background = { custom: false, rev: (config.background.rev || 0) + 1 };
           try { saveConfig(); } catch (e) { return send(res, 500, { ok: false, error: e.message }); }
+          syncOwn();
           if (!has(change, 'key')) return send(res, 200, { ok: true, config: publicConfig(), keyStatus: keyStatus });
           applyKey(config.key, function (state2) {
             setKeyStatus(state2, true);
@@ -1507,6 +1547,7 @@ function handle(req, res) {
           config.background = { custom: true, id: id, rev: (config.background.rev || 0) + 1 };
           saveConfig();
         } catch (e) { return send(res, 500, { ok: false, error: e.message }); }
+        syncOwn();
         send(res, 200, { ok: true, id: id, config: publicConfig() });
       });
     });
@@ -1533,6 +1574,7 @@ function handle(req, res) {
     }
     if (config.background.custom && (!gone || config.background.id === gone)) config.background = { custom: false, rev: (config.background.rev || 0) + 1 };
     saveConfig();
+    syncOwn();
     return send(res, 200, { ok: true, config: publicConfig() });
   }
   // A logo of yours for tiles, chosen by the page for one; refused when it would leave less than MIN_FREE free.
@@ -1673,6 +1715,7 @@ function start() {
   config = loadConfig();
   if (config.tvInput) inputStatus = 'active';
   try { migrate(); } catch (e) { log('background.jpg: ' + e.message); }
+  syncOwn();
   // While another program has the port, the next free one of the ten after it.
   listen(config.port, Math.min(config.port + 10, 65535), function (e, server, port) {
     if (e) {

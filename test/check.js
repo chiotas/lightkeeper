@@ -31,6 +31,7 @@ var env = {
   LIGHTKEEPER_PORT_FILE: path.join(tmp, 'port'),
   LIGHTKEEPER_SESSION: path.join(tmp, 'session'), // the boot hook's mark for each time the TV is on
   LIGHTKEEPER_DF: path.join(tmp, 'df'), // df, answering with the free space in tmp/df-free, in KB
+  LIGHTKEEPER_OWN: path.join(tmp, 'own'), // the copies for the Home, in the app's own/ on a TV
   LIGHTKEEPER_KEY_RECHECK: '0' // the key status asks the TV again at every read, not once a minute
 };
 fs.writeFileSync(env.LIGHTKEEPER_DF, '#!/bin/sh\necho "Filesystem 1K-blocks Used Available Use% Mounted on"\n' +
@@ -490,6 +491,32 @@ assert.equal(logos.rientroOra('digital', '8:41'), '-0.099em');
 assert.ok(!logos.RIENTRO_ORA.thin);
 var homeHtml = fs.readFileSync(path.join(__dirname, '..', 'app', 'index.html'), 'utf8');
 assert.ok(/allineaOra\(ora, meteoEl, cfg\)/.test(homeHtml), 'the Home lines the clock up');
+// The Home's background: the app's own beside the page; a picture uploaded first as the server's copy
+// beside the page, there at power on before the server is up, and from the server while it is not there.
+var fondi = { document: { body: { style: {} } }, server: function () { return 'http://127.0.0.1:8090'; } };
+var chieste = [], copie = {};
+fondi.Image = function () {
+  var img = this;
+  Object.defineProperty(img, 'src', { set: function (u) { chieste.push(u); (/^own\//.test(u) && !copie[u] ? img.onerror : img.onload)(); } });
+};
+vm.runInNewContext(homeHtml.slice(homeHtml.indexOf('var sfondoMesso'), homeHtml.indexOf('\nfunction disegna(')), fondi);
+function fondo(c) { return JSON.parse(JSON.stringify(fondi.fondo(c))); }
+assert.deepEqual(fondo({ preset: 'night', background: { custom: false, rev: 2 } }), ['backgrounds/night.jpg']);
+assert.deepEqual(fondo({ preset: 'night', background: { custom: true, id: 'my-0123abcd', rev: 4 }, started: 7 }),
+  ['own/my-0123abcd.jpg', 'http://127.0.0.1:8090/background.jpg?rev=4&s=7']);
+assert.deepEqual(fondo({ background: { custom: true, rev: 3 } }), ['http://127.0.0.1:8090/background.jpg?rev=3&s=0']); // no id: up to 1.0.7
+assert.deepEqual(fondo({ backgroundNow: 'my-89abcdef', background: { custom: true, id: 'my-0123abcd', rev: 4 }, started: 7 }),
+  ['own/my-89abcdef.jpg', 'http://127.0.0.1:8090/mine/my-89abcdef.jpg?s=7']);
+assert.deepEqual(fondo({ backgroundNow: 'dawn', background: { custom: true, id: 'my-0123abcd', rev: 4 } }), ['backgrounds/dawn.jpg']);
+var dove = fondo({ background: { custom: true, id: 'my-0123abcd', rev: 4 }, started: 7 });
+fondi.sfondo(dove[0], dove[1]); // no copy yet, as just after an update: the server's picture
+assert.deepEqual(chieste, dove); assert.equal(fondi.document.body.style.backgroundImage, 'url(' + dove[1] + ')');
+chieste = [];
+fondi.sfondo(dove[0], dove[1]); // the next change: the copy looked for again, the server's not asked twice
+assert.deepEqual(chieste, [dove[0]]); assert.equal(fondi.document.body.style.backgroundImage, 'url(' + dove[1] + ')');
+copie[dove[0]] = true;
+fondi.sfondo(dove[0], dove[1]); // the copy made: shown from then on, also at power on
+assert.equal(fondi.document.body.style.backgroundImage, 'url(own/my-0123abcd.jpg)');
 // On the left as always; on the right, the clock and the weather moved by their ink's distance from the edge.
 function finto(testo, piccolo) {
   return { style: {}, textContent: testo, getElementsByTagName: function (t) { return t === 'small' && piccolo ? [piccolo] : []; } };
@@ -555,6 +582,19 @@ function png(b) { return { headers: { 'Content-Type': 'image/png' }, body: b }; 
 function upload(file, cb) {
   req('POST', '/api/background', { headers: { 'Content-Type': 'image/jpeg' }, body: fs.readFileSync(path.join(__dirname, '..', 'app', 'backgrounds', file)) }, cb);
 }
+// The copies for the Home, made a moment after each change (df is asked first): looked at
+// until they are the pictures expected, by id, each the same bytes as the picture uploaded.
+function owned(ids, cb, dir, data) {
+  dir = dir || env.LIGHTKEEPER_OWN; data = data || env.LIGHTKEEPER_DATA;
+  var want = ids.map(function (id) { return id + '.jpg'; }).sort();
+  (function look(n) {
+    var got = fs.existsSync(dir) ? fs.readdirSync(dir).sort() : [];
+    if (JSON.stringify(got) !== JSON.stringify(want) && n) return setTimeout(function () { look(n - 1); }, 50);
+    assert.deepEqual(got, want, 'copies for the Home');
+    want.forEach(function (f) { assert.deepEqual(fs.readFileSync(path.join(dir, f)), fs.readFileSync(path.join(data, 'backgrounds', f)), f); });
+    cb();
+  })(40);
+}
 assert.deepEqual(s.jpegSize(jpeg), { width: 1920, height: 1080 });
 assert.equal(s.jpegSize(fs.readFileSync(path.join(__dirname, '..', 'app', 'icon.png'))), null);
 
@@ -605,6 +645,9 @@ function req(method, p, opts, cb) {
 }
 
 function json(o) { return { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(o) }; }
+// The boot hook's mark for a new time the TV is on, written whole: the server also reads it
+// a moment after each change, when it makes the copies for the Home, and could find it empty.
+function newSession(mark) { fs.writeFileSync(env.LIGHTKEEPER_SESSION + '.tmp', mark); fs.renameSync(env.LIGHTKEEPER_SESSION + '.tmp', env.LIGHTKEEPER_SESSION); }
 
 function httpChecks() {
   var child = spawn(process.execPath, [path.join(__dirname, '..', 'app', 'service', 'server.js')], { env: process.env, stdio: 'inherit' });
@@ -665,26 +708,27 @@ function httpChecks() {
         assert.equal(st2, 200);
         req('GET', '/mine/' + mineA + '-thumb.jpg', {}, function (st3, j3, h3, raw3) {
           assert.equal(st3, 200); assert.equal(raw3.length, thumbJpeg.length);
-          req('GET', '/background.jpg', {}, function (st4, j4, h4, raw4) { assert.equal(raw4.length, jpeg.length); next(); });
+          req('GET', '/background.jpg', {}, function (st4, j4, h4, raw4) { assert.equal(raw4.length, jpeg.length); owned([mineA], next); });
         });
       });
     }); },
     function (next) { req('POST', '/api/background/thumb?id=my-00000000', { headers: { 'Content-Type': 'image/jpeg' }, body: thumbJpeg }, function (st) { assert.equal(st, 404); next(); }); },
     function (next) { req('POST', '/api/background/thumb?id=' + mineA, { headers: { 'Content-Type': 'image/jpeg' }, body: jpeg }, function (st) { assert.equal(st, 400); next(); }); },
-    // Choosing one of the app's backgrounds leaves the picture in the list; taking it away removes both files.
+    // Choosing one of the app's backgrounds leaves the picture in the list, and its copy for the Home goes;
+    // taking it away removes both files.
     function (next) { req('POST', '/api/config', json({ preset: 'night' }), function (st, j) {
       assert.equal(st, 200); assert.equal(j.config.preset, 'night'); assert.equal(j.config.background.custom, false);
       assert.deepEqual(j.config.mine, [mineA]); assert.ok(fs.existsSync(path.join(env.LIGHTKEEPER_DATA, 'backgrounds', mineA + '.jpg')));
-      req('DELETE', '/api/background?id=' + mineA, {}, function (st2, j2) {
+      owned([], function () { req('DELETE', '/api/background?id=' + mineA, {}, function (st2, j2) {
         assert.equal(st2, 200); assert.deepEqual(j2.config.mine, []); assert.equal(j2.config.preset, 'night');
         assert.deepEqual(fs.readdirSync(path.join(env.LIGHTKEEPER_DATA, 'backgrounds')), []);
         req('GET', '/mine/' + mineA + '.jpg', {}, function (st3) { assert.equal(st3, 404); next(); });
-      });
+      }); });
     }); },
     // A random background for each time the TV is on: off, nothing changes.
     function (next) { req('GET', '/api/config', {}, function (st, j) { assert.equal(j.backgroundNow, null); assert.equal(j.preset, 'night'); next(); }); },
     function (next) {
-      fs.writeFileSync(env.LIGHTKEEPER_SESSION, 's0\n');
+      newSession('s0\n');
       req('POST', '/api/config', json({ randomBackground: true }), function (st, j) {
         assert.equal(st, 200); assert.ok(BACKGROUNDS.indexOf(j.config.backgroundNow) !== -1, j.config.backgroundNow);
         var first = j.config.backgroundNow, seen = [first];
@@ -692,7 +736,7 @@ function httpChecks() {
           assert.equal(j2.backgroundNow, first, 'the same while the TV stays on');
           (function next1(n) {
             if (n === 12) { assert.ok(seen.length > 3); return next(); }
-            fs.writeFileSync(env.LIGHTKEEPER_SESSION, 's' + (n + 1) + '\n');
+            newSession('s' + (n + 1) + '\n');
             req('GET', '/api/config', {}, function (st3, j3) {
               assert.notEqual(j3.backgroundNow, seen[seen.length - 1], 'never twice in a row');
               assert.equal(JSON.parse(fs.readFileSync(path.join(env.LIGHTKEEPER_DATA, 'background-session.json'), 'utf8')).now, j3.backgroundNow);
@@ -708,7 +752,7 @@ function httpChecks() {
       req('POST', '/api/config', json({ backgroundPool: ['night', 'dawn'] }), function (st, j) {
         var a = j.config.backgroundNow;
         assert.ok(a === 'night' || a === 'dawn', a);
-        fs.writeFileSync(env.LIGHTKEEPER_SESSION, 'pair\n');
+        newSession('pair\n');
         req('GET', '/api/config', {}, function (st2, j2) {
           assert.equal(j2.backgroundNow, a === 'night' ? 'dawn' : 'night');
           req('POST', '/api/config', json({ backgroundPool: ['night'] }), function (st3, j3) {
@@ -736,7 +780,7 @@ function httpChecks() {
     // Three pictures, no limit on how many: each chosen as it comes; any can be chosen again; sizes and free space listed.
     function (next) {
       (function more(files) {
-        if (!files.length) return next();
+        if (!files.length) return owned([mine3[2]], next); // the one chosen last
         upload(files[0], function (st, j) {
           assert.equal(st, 200); mine3.push(j.id);
           assert.deepEqual(j.config.mine, mine3); assert.equal(j.config.background.id, j.id);
@@ -753,7 +797,7 @@ function httpChecks() {
       assert.equal(st, 200); assert.equal(j.config.background.id, mine3[1]); assert.equal(j.config.preset, 'night');
       req('GET', '/background.jpg', {}, function (st2, j2, h2, raw) {
         assert.equal(raw.length, fs.statSync(path.join(__dirname, '..', 'app', 'backgrounds', 'night.jpg')).size);
-        req('POST', '/api/config', json({ preset: 'my-00000000' }), function (st3) { assert.equal(st3, 400); next(); });
+        req('POST', '/api/config', json({ preset: 'my-00000000' }), function (st3) { assert.equal(st3, 400); owned([mine3[1]], next); });
       });
     }); },
     // The random pick with pictures of yours: two ticked alternate; one taken away leaves too few.
@@ -761,19 +805,37 @@ function httpChecks() {
       assert.equal(st, 200);
       var a = j.config.backgroundNow;
       assert.ok(a === mine3[0] || a === mine3[2], a);
-      fs.writeFileSync(env.LIGHTKEEPER_SESSION, 'mine\n');
+      // A copy of the one picked for this time the TV is on, beside the chosen one's; the next time, the next one's.
+      owned([mine3[1], a], function () {
+      newSession('mine\n');
       req('GET', '/api/config', {}, function (st2, j2) {
         assert.equal(j2.backgroundNow, a === mine3[0] ? mine3[2] : mine3[0]);
+        owned([mine3[1], j2.backgroundNow], function () {
         req('GET', '/mine/' + j2.backgroundNow + '.jpg', {}, function (st3) {
           assert.equal(st3, 200);
           req('DELETE', '/api/background?id=' + mine3[2], {}, function (st4, j4) {
             assert.deepEqual(j4.config.backgroundPool, [mine3[0]]); assert.equal(j4.config.backgroundNow, null);
             assert.deepEqual(j4.config.mine, [mine3[0], mine3[1]]); assert.equal(j4.config.background.id, mine3[1], 'the chosen one stays');
-            req('POST', '/api/config', json({ randomBackground: false, backgroundPool: null }), function () { next(); });
+            owned([mine3[1]], function () {
+              req('POST', '/api/config', json({ randomBackground: false, backgroundPool: null }), function () { owned([mine3[1]], next); });
+            });
           });
         });
+        });
+      });
       });
     }); },
+    // Short of space where the app is: no copy, and the old one gone all the same; with room again, made.
+    function (next) {
+      fs.writeFileSync(path.join(tmp, 'df-free'), String(64 * 1024 + 10)); // 10 KB over the margin
+      req('POST', '/api/config', json({ preset: mine3[0] }), function (st, j) {
+        assert.equal(st, 200); assert.equal(j.config.background.id, mine3[0]);
+        owned([], function () {
+          fs.writeFileSync(path.join(tmp, 'df-free'), '10485760');
+          req('POST', '/api/config', json({ preset: mine3[0] }), function () { owned([mine3[0]], next); });
+        });
+      });
+    },
     // Open apps: off by default, and then the TV is not even asked.
     // Logos of yours: only a PNG with transparency up to 2000 × 240, under a name the server picks.
     function (next) { req('POST', '/api/logo', png(jpeg), function (st) { assert.equal(st, 400); next(); }); },
@@ -1021,6 +1083,11 @@ function migrationChecks(done) {
   menv.LIGHTKEEPER_PORT = '18490';
   menv.LIGHTKEEPER_DATA = data;
   menv.LIGHTKEEPER_PORT_FILE = path.join(tmp, 'port-4');
+  // The copies for the Home: what is not the chosen picture goes, a copy cut short by a power cut too.
+  menv.LIGHTKEEPER_OWN = path.join(tmp, 'own-migration');
+  fs.mkdirSync(menv.LIGHTKEEPER_OWN);
+  fs.writeFileSync(path.join(menv.LIGHTKEEPER_OWN, 'my-00000000.jpg'), 'gone since');
+  fs.writeFileSync(path.join(menv.LIGHTKEEPER_OWN, 'my-00000001.jpg.tmp'), 'half');
   var child = spawn(process.execPath, [server], { env: menv });
   child.on('exit', function (code) { if (code) { console.error('migration server exited ' + code); process.exit(1); } });
   setTimeout(function () {
@@ -1032,9 +1099,18 @@ function migrationChecks(done) {
       assert.deepEqual(fs.readFileSync(path.join(data, 'backgrounds', j.mine[0] + '.jpg')), jpeg);
       req('GET', '/background.jpg', { port: 18490 }, function (st2, j2, h2, raw) {
         assert.deepEqual(raw, jpeg);
-        child.removeAllListeners('exit');
-        child.kill();
-        done();
+        owned([j.mine[0]], function () {
+          child.removeAllListeners('exit');
+          child.kill();
+          // An update empties the app's folder: the next start makes the copy again.
+          fs.readdirSync(menv.LIGHTKEEPER_OWN).forEach(function (f) { fs.unlinkSync(path.join(menv.LIGHTKEEPER_OWN, f)); });
+          fs.rmdirSync(menv.LIGHTKEEPER_OWN);
+          child = spawn(process.execPath, [server], { env: menv });
+          owned([j.mine[0]], function () {
+            child.kill();
+            done();
+          }, menv.LIGHTKEEPER_OWN, data);
+        }, menv.LIGHTKEEPER_OWN, data);
       });
     });
   }, 700);
@@ -1054,6 +1130,7 @@ function inputChecks(done) {
   ienv.LIGHTKEEPER_DATA = path.join(tmp, 'data-input');
   ienv.LIGHTKEEPER_PORT_FILE = path.join(tmp, 'port-5');
   ienv.LIGHTKEEPER_HOOK = path.join(tmp, 'hook-input');
+  ienv.LIGHTKEEPER_OWN = path.join(tmp, 'own-input');
   var saved = function () { return JSON.parse(fs.readFileSync(path.join(ienv.LIGHTKEEPER_DATA, 'config.json'), 'utf8')); };
   var listed = function () { try { return fs.readFileSync(inputs, 'utf8').split('\n').indexOf(LK) !== -1; } catch (e) { return false; } };
   var eim = function () { return fs.readFileSync(calls, 'utf8').split('\n').filter(function (l) { return /eim\/(addDevice|deleteDevice)/.test(l); }); };
@@ -1115,9 +1192,12 @@ function inputChecks(done) {
                               // --uninstall: taken out while on; eim not asked while off.
                               fs.writeFileSync(path.join(ienv.LIGHTKEEPER_DATA, 'config.json'), JSON.stringify({ tvInput: true }));
                               fs.writeFileSync(inputs, LK + '\n');
+                              fs.mkdirSync(ienv.LIGHTKEEPER_OWN);
+                              fs.writeFileSync(path.join(ienv.LIGHTKEEPER_OWN, 'my-00000000.jpg'), '');
                               uninstall();
                               assert.ok(!listed()); assert.ok(/deleteDevice/.test(eim().pop()));
                               assert.ok(!fs.existsSync(ienv.LIGHTKEEPER_DATA));
+                              assert.ok(!fs.existsSync(ienv.LIGHTKEEPER_OWN), 'the copies for the Home go with the settings');
                               assert.ok(/appInstallService\/dev\/remove/.test(fs.readFileSync(calls, 'utf8')));
                               fs.mkdirSync(ienv.LIGHTKEEPER_DATA);
                               fs.writeFileSync(path.join(ienv.LIGHTKEEPER_DATA, 'config.json'), JSON.stringify({ tvInput: false }));

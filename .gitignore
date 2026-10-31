@@ -16,3 +16,4 @@ test/fake-tv/running
 test/fake-tv/session
 test/fake-tv/inputs
 test/fake-tv/refuse-input
+app/own/

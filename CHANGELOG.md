@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.14 (unreleased)
+
+- **A picture of your own shows at once when the TV comes on**, as the backgrounds Lightkeeper carries always did. As reported on Reddit, an uploaded picture left the Home black behind the tiles for a while at power on: it came from Lightkeeper's server on the TV, which starts well after the Home is on screen, while the backgrounds Lightkeeper carries are files beside the Home. On a C1 with webOS 6.5.3, on 30 October, after a restart with Lightkeeper as the last input, the Home was on screen at 27.6 seconds and the server was up 11 to 12 seconds later. The server now keeps a copy of the picture chosen, and with *Random each time the TV turns on* of the one picked for this time the TV is on, inside the app, in `own/`, and the Home loads it as a file, as it does the others. The copy is made again at each start of the server and after each upload, choice or removal of a picture, and any other file in `own/` is taken away; removing Lightkeeper takes the folder away too. A copy is never made at the cost of the 64 MB kept free, and while there is none, as just after an update and before the server starts again, the Home asks the server, as up to 1.0.13. Tried in a computer's browser against the stand-in TV: with the server stopped, the Home showed the uploaded picture from its copy; with the copy taken away, it stayed black, as in 1.0.13, until the server started again and made the copy anew. Not yet tried on a TV.
+
 ## 1.0.13 (30 October 2026)
 
 - **The package is laid out like the Homebrew Channel's own.** The names of the files inside it no longer start with `./`, as in the packages ares-package makes, so the check of the Homebrew Channel's catalog can read it: it looked for `control` and found `./control`. Nothing else changes: the files, their contents and their modes are the same as in 1.0.12.

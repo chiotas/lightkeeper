@@ -351,7 +351,7 @@ var CARDS = '<svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><
  * another: at power on an uploaded picture came in over the app's own one.
  */
 var sfondoMesso = '', sfondoChiesto = '';
-function sfondo(url) {
+function sfondo(url, riserva) {
   if (url === sfondoMesso || url === sfondoChiesto) return;
   sfondoChiesto = url;
   var img = new Image();
@@ -361,8 +361,28 @@ function sfondo(url) {
     sfondoChiesto = '';
     document.body.style.backgroundImage = 'url(' + url + ')';
   };
-  img.onerror = function () { if (sfondoChiesto === url) sfondoChiesto = ''; };
+  img.onerror = function () {
+    if (sfondoChiesto !== url) return;
+    sfondoChiesto = '';
+    if (riserva) sfondo(riserva);
+  };
   img.src = url;
+}
+
+/*
+ * Where the background is: the app's own beside this page; a picture uploaded first as the
+ * server's copy beside this page too, there at power on before the server is up, then from
+ * the server, as up to 1.0.13, while the copy is not there (just after an update).
+ * With the server's start in its address: a picture that failed while it was down is asked again.
+ * With a random background, the one the server picked for this time the TV is on.
+ */
+function fondo(c) {
+  var bg = /^[a-z0-9-]+$/.test(c.backgroundNow || '') ? c.backgroundNow :
+    c.background && c.background.custom ? 'custom' : /^[a-z0-9-]+$/.test(c.preset || '') ? c.preset : 'godrevy';
+  var mio = bg === 'custom' ? c.background.id : bg;
+  var url = bg === 'custom' ? server() + '/background.jpg?rev=' + c.background.rev + '&s=' + (c.started || 0) :
+    /^my-/.test(bg) ? server() + '/mine/' + bg + '.jpg?s=' + (c.started || 0) : 'backgrounds/' + bg + '.jpg';
+  return /^my-[0-9a-f]{8}$/.test(mio || '') ? ['own/' + mio + '.jpg', url] : [url];
 }
 
 function disegna() {
@@ -413,17 +433,10 @@ function disegna() {
   posiziona();
   veil.className = (cfg.clockSide === 'right' ? 'dx' : '') + (seconda ? ' due' + (modo === 'text' ? ' nomi' : '') : '');
   veil.style.opacity = (typeof cfg.veil === 'number' ? cfg.veil : 80) / 100;
-  // An uploaded picture comes from the server; the app's own backgrounds are beside this page.
-  // With the server's start in the address: a picture that failed while it was down is asked again.
-  // With a random background, the one the server picked for this time the TV is on.
-  var bg = /^[a-z0-9-]+$/.test(cfg.backgroundNow || '') ? cfg.backgroundNow :
-    cfg.background && cfg.background.custom ? 'custom' : /^[a-z0-9-]+$/.test(cfg.preset || '') ? cfg.preset : 'godrevy';
-  // A picture uploaded, picked at random, comes from the server under its own id.
-  var url = bg === 'custom' ? server() + '/background.jpg?rev=' + cfg.background.rev + '&s=' + (cfg.started || 0) :
-    /^my-/.test(bg) ? server() + '/mine/' + bg + '.jpg?s=' + (cfg.started || 0) : 'backgrounds/' + bg + '.jpg';
+  var f = fondo(cfg);
   // The random one kept from last time is not shown before the server's answer, for a moment at most.
-  if (cfg.randomBackground && !letto) setTimeout(function () { if (!letto) sfondo(url); }, 800);
-  else sfondo(url);
+  if (cfg.randomBackground && !letto) setTimeout(function () { if (!letto) sfondo(f[0], f[1]); }, 800);
+  else sfondo(f[0], f[1]);
   seleziona(iniziale());
   aggiorna();
   mettiCasa();

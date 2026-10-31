@@ -64,6 +64,8 @@ def add_dir(d):
             dirs.add(p)
             entries.append((p, None, 0o755))
 for here, subdirs, files in os.walk(app):
+    if here == app and 'own' in subdirs:
+        subdirs.remove('own')  # copies of uploaded pictures, made by a preview's server
     subdirs.sort()
     rel = os.path.relpath(here, app)
     add_dir(base if rel == '.' else base + '/' + rel)
