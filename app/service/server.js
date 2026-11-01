@@ -1242,7 +1242,7 @@ function closeApps(ids, cb) {
 function fromHome(req) {
   var a = String(req.socket.remoteAddress || '').replace(/^::ffff:/, ''), o = req.headers.origin;
   return (a === '127.0.0.1' || a === '::1') &&
-    (o === undefined || o === 'null' || o === 'file://' || o === 'file://' + APP_ID + '-webos' ||
+    (o === undefined || o === 'null' || o === 'file://' || o === 'file://' + APP_ID || o === 'file://' + APP_ID + '-webos' ||
       /^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/.test(o));
 }
 
