@@ -168,6 +168,8 @@ function fromHome(addr, origin) { return s.fromHome({ socket: { remoteAddress: a
 assert.ok(fromHome('127.0.0.1', 'null') && fromHome('::ffff:127.0.0.1', 'null') && fromHome('::1', 'file://'));
 assert.ok(fromHome('127.0.0.1') && fromHome('127.0.0.1', 'http://127.0.0.1:8091') && fromHome('127.0.0.1', 'http://localhost'));
 assert.ok(fromHome('127.0.0.1', 'file://io.github.chiotas.lightkeeper-webos'), 'the Home on webOS 6');
+assert.ok(fromHome('127.0.0.1', 'file://io.github.chiotas.lightkeeper'), 'the Home on webOS 3.9 (issue #13)');
+assert.ok(!fromHome('127.0.0.1', 'file://io.github.chiotas.lightkeeper.evil') && !fromHome('192.168.0.20', 'file://io.github.chiotas.lightkeeper'));
 assert.ok(!fromHome('127.0.0.1', 'file://other.app-webos') && !fromHome('192.168.0.20', 'file://io.github.chiotas.lightkeeper-webos'));
 assert.ok(!fromHome('192.168.0.20', 'null') && !fromHome('192.168.0.20'), 'not from a phone');
 assert.ok(!fromHome('127.0.0.1', 'https://evil.example') && !fromHome('127.0.0.1', 'http://127.0.0.1.evil.example') && !fromHome('127.0.0.1', 'http://192.168.0.53:8090'));
