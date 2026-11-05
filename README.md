@@ -70,6 +70,49 @@ The preview at the top is the Home as the TV draws it, and it changes as you go.
 
 On the remote: **← →** to move, **OK** to open, **Back** to leave, **↓** for LG's own Home. With *Two rows*, **↑ ↓** go from one row to the other, and **↓** on the lower row opens LG's Home. With the Magic Remote's pointer, the arrows at the ends of a long row, or the wheel, slide it.
 
+### Updates in Home Assistant
+
+Home Assistant can show Lightkeeper as an update, with an Install button, from its own configuration: Lightkeeper needs nothing more. Put this in `packages/lightkeeper.yaml` in Home Assistant's configuration folder, with `<tv-ip>` changed to the TV's IP address (Lightkeeper refuses requests that reach it by name):
+
+```yaml
+rest:
+  - resource: http://<tv-ip>:8090/api/update
+    scan_interval: 3600
+    sensor:
+      - name: Lightkeeper installed
+        unique_id: lightkeeper_installed
+        value_template: "{{ value_json.current }}"
+        json_attributes: [latest, available, status, error]
+
+rest_command:
+  lightkeeper_install:
+    url: http://<tv-ip>:8090/api/update
+    method: post
+    content_type: application/json
+    payload: "{}"
+    timeout: 200
+
+template:
+  - update:
+      - name: Lightkeeper
+        unique_id: lightkeeper_update
+        installed_version: "{{ states('sensor.lightkeeper_installed') }}"
+        latest_version: "{{ state_attr('sensor.lightkeeper_installed', 'latest') or states('sensor.lightkeeper_installed') }}"
+        in_progress: "{{ (state_attr('sensor.lightkeeper_installed', 'status') or {}).get('state') == 'installing' }}"
+        release_url: https://github.com/chiotas/lightkeeper/releases/latest
+        install:
+          - action: rest_command.lightkeeper_install
+```
+
+Then turn packages on in `configuration.yaml`, if they aren't on already:
+
+```yaml
+homeassistant:
+  packages: !include_dir_named packages
+```
+
+A package keeps these sections apart from the `rest:`, `rest_command:` or `template:` you may already have in `configuration.yaml`, where a second section with the same name would replace the first. With a PIN set in Lightkeeper, add `headers:` with `X-Lightkeeper-PIN: !secret lightkeeper_pin` under both the `rest` resource and the `rest_command`. Install does what the Update button in the settings does, and Home Assistant waits up to 200 seconds while the TV downloads and checks the package. Reported working on a CX with webOS 5.6.2 ([#18](https://github.com/chiotas/lightkeeper/issues/18)); Install itself is untried until the next release.
+
 ## Remove it
 
 Any of these takes it all away:
@@ -250,7 +293,7 @@ Poi aprite Lightkeeper una volta dalle app della TV (via SSH si apre da sola). A
 - per ogni ingresso l'apparecchio collegato, oppure un'icona generica (TV, lettore multimediale, console, HDMI); *Automatic*, la prima scelta, lo indovina dal nome della voce, e Live TV mostra una TV;
 - lo sfondo, tra i diciannove che Lightkeeper porta con sé (la foto del faro di Godrevy, sei marine e carte nautiche di pubblico dominio, dieci marine di Ivan Aivazovsky, due sfumature) oppure vostre immagini, quante ne entrano lasciando 64 MB liberi sulla TV, ritagliate e ridimensionate a 1920 o 3840 pixel sul telefono prima dell'invio, o uno a caso a ogni accensione fra quelli spuntati, mai lo stesso due volte di fila (*Random each time the TV turns on*); e l'intensità del velo;
 - l'orologio a 24 o 12 ore, il suo stile (sottile, classico, deciso, monospaziato, arrotondato o digitale) e la dimensione, e la città del meteo, cercata su Open-Meteo, in °C o °F; ora e meteo a sinistra o a destra; con *Clock in the city's time*, spento finché non lo accendete, per le TV col fuso orario sbagliato, l'orologio segna l'ora della città del meteo: l'ora UTC della TV più lo scarto della città, che arriva con ogni aggiornamento del meteo, ogni 15 minuti. Il passaggio all'ora legale o solare si vede al massimo 15 minuti dopo, se il meteo risponde; se non risponde resta l'ultimo scarto, e senza nessuno l'ora della TV. Serve una città del meteo;
-- Home Assistant, spento finché non lo collegate con indirizzo e token di lunga durata. Il token si crea in Home Assistant, nel profilo, *Sicurezza*, meglio con un utente apposta per la TV e non amministratore, perché il token può fare tutto quello che può il suo utente. Poi sotto il meteo compaiono fino a quattro valori, e le voci accendono o spengono una luce o un interruttore, o avviano una scena o uno script. Il token resta sulla TV e non torna mai alla pagina;
+- Home Assistant, spento finché non lo collegate con indirizzo e token di lunga durata. Il token si crea in Home Assistant, nel profilo, *Sicurezza*, meglio con un utente apposta per la TV e non amministratore, perché il token può fare tutto quello che può il suo utente. Poi sotto il meteo compaiono fino a quattro valori, e le voci accendono o spengono una luce o un interruttore, o avviano una scena o uno script. Il token resta sulla TV e non torna mai alla pagina. Home Assistant può anche mostrare gli aggiornamenti di Lightkeeper, con un tasto per installarli: la configurazione è in *Updates in Home Assistant*;
 - una pausa di un'ora dello screensaver di LG, per fare prove;
 - il tasto che apre Lightkeeper (con Home, anche Indietro dall'ultima app torna qui) e l'apertura all'accensione, sopra un ingresso, la Home di LG o l'app rimasta aperta allo spegnimento, ma non sopra un'app partita con la TV (tasto Netflix, cast dal telefono);
 - la porta della pagina (*Address*);
