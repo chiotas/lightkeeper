@@ -32,7 +32,8 @@ var env = {
   LIGHTKEEPER_SESSION: path.join(tmp, 'session'), // the boot hook's mark for each time the TV is on
   LIGHTKEEPER_DF: path.join(tmp, 'df'), // df, answering with the free space in tmp/df-free, in KB
   LIGHTKEEPER_OWN: path.join(tmp, 'own'), // the copies for the Home, in the app's own/ on a TV
-  LIGHTKEEPER_KEY_RECHECK: '0' // the key status asks the TV again at every read, not once a minute
+  LIGHTKEEPER_KEY_RECHECK: '0', // the key status asks the TV again at every read, not once a minute
+  LIGHTKEEPER_KEY_TEST: path.join(tmp, 'keytest') // the remote's test, never the TV's /tmp
 };
 fs.writeFileSync(env.LIGHTKEEPER_DF, '#!/bin/sh\necho "Filesystem 1K-blocks Used Available Use% Mounted on"\n' +
   'echo "/dev/fake 20971520 1 $(cat ' + path.join(tmp, 'df-free') + ') 1% /var"\n', { mode: 493 });
@@ -221,6 +222,58 @@ var noFilters = require('child_process').execFileSync(process.execPath, ['-e',
   'require(' + JSON.stringify(require.resolve('../app/service/server.js')) + ").applyKey('home', function (s) { console.log(s); })"],
   { env: Object.assign({}, process.env, { LIGHTKEEPER_KEY_FILTERS: path.join(tmp, 'no-key-filters') }) }).toString().trim();
 assert.equal(noFilters, 'unsupported');
+
+// The Home key read from the remote (webOS 2 and 3). Events as the kernel gives them: two times of a
+// long each, then type, code and value; 16 bytes for a 32-bit reader, 24 for a 64-bit one.
+function inputEvent(size, type, code, value) {
+  var b = Buffer.alloc ? Buffer.alloc(size) : new Buffer(size);
+  b.fill(0); b.writeUInt32LE(1730000000, 0); // a time, which is not read
+  b.writeUInt16LE(type, size - 8); b.writeUInt16LE(code, size - 6); b.writeInt32LE(value, size - 4);
+  return b;
+}
+var SYN = function (size) { return inputEvent(size, 0, 0, 0); };
+[16, 24].forEach(function (size) {
+  var press = Buffer.concat([inputEvent(size, 1, 773, 1), SYN(size)]), held = Buffer.concat([inputEvent(size, 1, 773, 2), SYN(size)]);
+  var release = Buffer.concat([inputEvent(size, 1, 773, 0), SYN(size)]);
+  assert.deepEqual(s.keyPresses(press, size).codes, [773], size + ': a press');
+  assert.deepEqual(s.keyPresses(held, size).codes, [], size + ': a repeat while held');
+  assert.deepEqual(s.keyPresses(release, size).codes, [], size + ': the release');
+  assert.deepEqual(s.keyPresses(inputEvent(size, 2, 773, 1), size).codes, [], size + ': not a key (EV_REL)');
+  var all = Buffer.concat([press, held, held, release, inputEvent(size, 1, 172, 1), inputEvent(size, 1, 103, 1)]);
+  assert.deepEqual(s.keyPresses(all, size).codes, [773, 172, 103]);
+  // An event in two pieces: the start is kept for the next read.
+  var first = s.keyPresses(all.slice(0, size + 5), size);
+  assert.deepEqual(first.codes, [773]); assert.equal(first.rest.length, 5);
+  assert.deepEqual(s.keyPresses(Buffer.concat([first.rest, all.slice(size + 5)]), size).codes, [172, 103]);
+});
+assert.equal(s.keyPresses(inputEvent(16, 1, 773, 1), 24).codes.length, 0, '16 bytes read as 24 are not a whole event');
+// The size by the reader's ELF class (1: 32-bit, 2: 64-bit), else by node's arch.
+var elf = function (cls) { var b = Buffer.alloc ? Buffer.alloc(5) : new Buffer(5); b[0] = 0x7f; b.write('ELF', 1, 'ascii'); b[4] = cls; return b; };
+assert.equal(s.eventSize(elf(1), 'arm64'), 16); assert.equal(s.eventSize(elf(2), 'arm'), 24);
+assert.equal(s.eventSize(null, 'arm'), 16); assert.equal(s.eventSize(null, 'arm64'), 24); assert.equal(s.eventSize(null, 'ia32'), 16);
+// /proc/bus/input/devices, in the kernel's format (made up, not from a TV): KEY in hex words, the
+// highest first, unpadded, of 32 bits for a 32-bit reader and 64 for a 64-bit one.
+function inputDevices(bits) {
+  var key = bits === 32 ? '20 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1000 0 100000 0 0 0' : '20 0 0 0 0 0 0 0 0 0 100000000000 10000000000000 0';
+  return ['I: Bus=0000 Vendor=0000 Product=0000 Version=0000', 'N: Name="gpio-keys"', 'H: Handlers=kbd event0',
+    'B: EV=3', 'B: KEY=100000 0 0 0', '',
+    'I: Bus=0019 Vendor=0000 Product=0001 Version=0001', 'N: Name="LGE RCU"', 'P: Phys=', 'H: Handlers=sysrq kbd event1 ',
+    'B: PROP=0', 'B: EV=3', 'B: KEY=' + key, '',
+    'I: Bus=0005 Vendor=0000 Product=0002 Version=0001', 'N: Name="LGE M-RCU motion"', 'H: Handlers=mouse0 event2', 'B: EV=5', 'B: REL=3', '',
+    'I: Bus=0003 Vendor=046d Product=c31c Version=0110', 'N: Name="USB Mouse"', 'H: Handlers=mouse1', 'B: EV=17', ''].join('\n');
+}
+assert.deepEqual(s.homeDevices(inputDevices(32), 32), [{ event: 'event1', name: 'LGE RCU' }], 'by its keys: power only, motion and no handler are not');
+assert.deepEqual(s.homeDevices(inputDevices(64), 64), [{ event: 'event1', name: 'LGE RCU' }]);
+assert.deepEqual(s.homeDevices(inputDevices(64), 32), [{ event: 'event1', name: 'LGE RCU' }], 'words of the wrong width find no Home: by name, with keys');
+assert.deepEqual(s.homeDevices(inputDevices(32).replace(/^B: KEY=.*$/gm, 'B: KEY=0'), 32), [{ event: 'event1', name: 'LGE RCU' }], 'no Home code anywhere: by name');
+assert.deepEqual(s.homeDevices('', 32), []);
+// On only where GlassHouse cannot take the key (no LG key filters) on webOS 2 and 3 with the key on Home;
+// the test on any TV, whatever the key.
+assert.equal(s.remoteWanted(false, false, 3, 'home'), 'open'); assert.equal(s.remoteWanted(false, false, 2, 'home'), 'open');
+assert.equal(s.remoteWanted(false, false, 3, 'none'), '', 'the key on None');
+assert.equal(s.remoteWanted(false, true, 3, 'home'), '', 'with LG key filters, GlassHouse has the key');
+assert.equal(s.remoteWanted(false, false, 11, 'home'), '', 'webOS 11, not tried'); assert.equal(s.remoteWanted(false, false, 0, 'home'), '', 'webOS not known');
+assert.equal(s.remoteWanted(true, true, 6, 'none'), 'test');
 
 // At power on (the boot hook): over an input, LG's Home or nothing; over the app
 // webOS puts back from before the TV went off; not over one that came up with it.
@@ -937,7 +990,7 @@ function httpChecks() {
     if (i === steps.length) {
       child.removeAllListeners('exit');
       child.kill();
-      return portChecks(function () { updateChecks(function () { migrationChecks(function () { inputChecks(function () { haChecks(function () { console.log('check: all good'); }); }); }); }); });
+      return portChecks(function () { updateChecks(function () { migrationChecks(function () { inputChecks(function () { haChecks(function () { remoteChecks(function () { console.log('check: all good'); }); }); }); }); }); });
     }
     steps[i](function () { run(i + 1); });
   }
@@ -1397,3 +1450,89 @@ function haChecks(done) {
   }
   setTimeout(function () { run(0); }, 700); // a moment to start listening
 }
+
+// The Home key read from the remote, on a TV without LG's key filters that says it has webOS 3:
+// /proc/bus/input/devices made up, and a FIFO for event1, read by the real cat. A press opens
+// Lightkeeper once, the same press again soon after does not; the test logs and opens nothing,
+// other keys too; a device that goes and comes back is read again; the key on None reads nothing;
+// stopping the server stops its cat.
+function remoteChecks(done) {
+  var server = path.join(__dirname, '..', 'app', 'service', 'server.js'), cp = require('child_process');
+  var dir = path.join(tmp, 'remote'), input = path.join(dir, 'input'), devices = path.join(dir, 'devices'), keytest = path.join(dir, 'keytest');
+  var bits = /64/.test(process.arch) ? 64 : 32, calls = path.join(FAKE, 'calls.log');
+  fs.mkdirSync(dir); fs.mkdirSync(input);
+  cp.execFileSync('mkfifo', [path.join(input, 'event1')]);
+  fs.writeFileSync(devices, inputDevices(bits));
+  var renv = {};
+  Object.keys(process.env).forEach(function (k) { renv[k] = process.env[k]; });
+  renv.LIGHTKEEPER_PORT = '18690';
+  renv.LIGHTKEEPER_DATA = path.join(dir, 'data');
+  renv.LIGHTKEEPER_PORT_FILE = path.join(dir, 'port');
+  renv.LIGHTKEEPER_KEY_FILTERS = path.join(dir, 'no-key-filters');
+  renv.LIGHTKEEPER_INPUT_DEVICES = devices;
+  renv.LIGHTKEEPER_DEV_INPUT = input;
+  renv.LIGHTKEEPER_KEY_TEST = keytest;
+  renv.LIGHTKEEPER_REMOTE_EVERY = '100';
+  renv.FAKE_WEBOS = '3.9.3'; // the fake luna-send's sdkVersion
+  var child = spawn(process.execPath, [server], { env: renv, stdio: ['ignore', 'pipe', 'inherit'] });
+  var logged = '', size = 0, fd = null;
+  child.stdout.on('data', function (d) { logged += d; });
+  var launches = function () {
+    return (fs.existsSync(calls) ? fs.readFileSync(calls, 'utf8') : '').split('\n').filter(function (l) { return /applicationManager\/launch .*io\.github\.chiotas\.lightkeeper/.test(l); }).length;
+  };
+  // Waits for the log to match, up to 3 s.
+  var until = function (re, cb, n) {
+    if (re.test(logged)) return cb();
+    if ((n || 0) > 60) { console.error(logged); assert.fail('not logged: ' + re); }
+    setTimeout(function () { until(re, cb, (n || 0) + 1); }, 50);
+  };
+  var press = function (code, value) { return Buffer.concat([inputEvent(size, 1, code, value), SYN(size)]); };
+  var write = function (b, cb) { fs.write(fd, b, 0, b.length, null, function (err) { assert.ifError(err); cb(); }); };
+  var cats = function () { try { return cp.execFileSync('pgrep', ['-f', path.join(input, 'event1')]).toString().trim(); } catch (e) { return ''; } };
+  var opened;
+  var steps = [
+    function (next) { until(/remote: reading event1 \(LGE RCU\), events of (16|24) bytes\n/, function () {
+      size = +/events of (16|24) bytes/.exec(logged)[1];
+      assert.ok(!/a test/.test(logged));
+      fs.open(path.join(input, 'event1'), 'w', function (err, f) { assert.ifError(err); fd = f; next(); }); // once cat reads it
+    }); },
+    function (next) { req('GET', '/api/config', { port: 18690 }, function (st, j) { assert.equal(j.keyStatus, 'reading'); next(); }); },
+    function (next) {
+      opened = launches();
+      write(Buffer.concat([press(773, 1), press(773, 2), press(773, 2), press(773, 0)]), function () {
+        until(/remote: Home 773 on event1 \(LGE RCU\): opening Lightkeeper\n/, function () {
+          setTimeout(function () { assert.equal(launches(), opened + 1, 'opened once'); next(); }, 300);
+        });
+      });
+    },
+    function (next) { write(press(172, 1), function () { until(/remote: Home 172 on event1 \(LGE RCU\), \d+ ms after the last: not again\n/, function () {
+      assert.equal(launches(), opened + 1); next(); }); }); },
+    // The test: logged, nothing opened, other keys too.
+    function (next) { fs.writeFileSync(keytest, ''); until(/events of \d+ bytes; a test: nothing opens\n/, next); },
+    function (next) { setTimeout(function () { write(Buffer.concat([press(773, 1), press(103, 1)]), function () {
+      until(/remote: key 103 on event1 \(LGE RCU\) \(test\)\n/, function () {
+        assert.ok(/remote: Home 773 on event1 \(LGE RCU\): nothing opened \(test\)\n/.test(logged)); assert.equal(launches(), opened + 1); next(); });
+    }); }, PRESS_GAP_MS); },
+    function (next) { fs.unlinkSync(keytest); logged = ''; until(/remote: reading event1 \(LGE RCU\), events of \d+ bytes\n/, next); },
+    // Gone from the list, its cat stops; back, it is read again.
+    function (next) { fs.writeFileSync(devices, ''); until(/remote: no remote with a Home key in /, function () {
+      setTimeout(function () { assert.equal(cats(), ''); next(); }, 200); }); },
+    function (next) { logged = ''; fs.writeFileSync(devices, inputDevices(bits)); until(/remote: reading event1/, function () {
+      setTimeout(function () { write(press(773, 1), function () { until(/opening Lightkeeper/, function () {
+        setTimeout(function () { assert.equal(launches(), opened + 2); next(); }, 300); }); }); }, PRESS_GAP_MS); }); },
+    // The key on None: nothing read; Home again: read again.
+    function (next) { req('POST', '/api/config', { port: 18690, headers: { 'Content-Type': 'application/json' }, body: '{"key":"none"}' }, function (st, j) {
+      assert.equal(st, 200); assert.equal(j.keyStatus, 'off'); until(/remote: off\n/, next); }); },
+    function (next) { req('POST', '/api/config', { port: 18690, headers: { 'Content-Type': 'application/json' }, body: '{"key":"home"}' }, function (st, j) {
+      assert.equal(st, 200); assert.equal(j.keyStatus, 'reading'); next(); }); },
+    function (next) { setTimeout(function () { assert.notEqual(cats(), ''); child.removeAllListeners('exit'); child.kill(); next(); }, 300); },
+    function (next) { setTimeout(function () { assert.equal(cats(), '', 'no cat left'); fs.closeSync(fd); next(); }, 300); }
+  ];
+  function run(i) {
+    if (i < steps.length) return steps[i](function () { run(i + 1); });
+    done();
+  }
+  child.on('exit', function (code) { console.error(logged); assert.fail('server exited ' + code); });
+  run(0);
+}
+var PRESS_GAP_MS = 1600; // past the server's 1.5 s between two presses that open

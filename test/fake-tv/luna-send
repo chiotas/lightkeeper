@@ -37,5 +37,7 @@ case "$uri" in
     id=$(printf %s "$params" | sed -n 's/.*"id": *"\([^"]*\)".*/\1/p')
     [ -f "$F/running" ] && { grep -vx "$id" "$F/running" > "$F/running.new"; mv "$F/running.new" "$F/running"; }
     echo "{\"returnValue\":true,\"appId\":\"$id\"}" ;;
+  # The webOS version, $FAKE_WEBOS or a C1's.
+  */getSystemInfo) echo "{\"returnValue\":true,\"sdkVersion\":\"${FAKE_WEBOS:-6.5.3}\"}" ;;
   *) echo '{"returnValue":true}' ;;
 esac

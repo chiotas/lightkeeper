@@ -6,7 +6,8 @@
  * Started and kept running by the boot hook (lightkeeper-init). It runs no
  * command it is sent: the only programs it starts are luna-send, with calls
  * written here, GlassHouse's tvwebctl, curl for the newest release's manifest
- * and package, and update.sh to install that package.
+ * and package, update.sh to install that package and, on webOS 2 and 3, cat to
+ * read the remote's Home key.
  *
  *   node server.js              serve
  *   node server.js --uninstall  put the remote keys back, remove the hook,
@@ -14,7 +15,7 @@
  *   node server.js --port 8091  the port from the next start, for when the
  *                               settings page cannot be opened
  *
- * Strict ES5: it runs on the TV's own node, which is 0.12 on webOS 4.
+ * Strict ES5: it runs on the TV's own node, which is 0.12 on webOS 3 and 4, 0.10 on webOS 2.
  */
 'use strict';
 var http = require('http');
@@ -706,6 +707,179 @@ function keyState(key, changed, cb) {
   });
 }
 
+/* ---------- the Home key read from the remote, on webOS 2 and 3 ---------- */
+
+/*
+ * Without LG's key filters (webOS 2 and 3, applyKey: unsupported) GlassHouse cannot hand the
+ * Home key over. The idea is HomeKeyBridge's, by Deko1988uwu (knives69 on GitHub): read the
+ * remote's devices in /dev/input as they are, without EVIOCGRAB, so LG still gets every key and
+ * the remote works as before if this stops, and open Lightkeeper on a Home press. Each device is
+ * read by a cat of its own: node 0.10 (webOS 2) and 0.12 (webOS 3) read a device only in their
+ * thread pool, whose four threads a read waiting for a key would keep for good, while a pipe is
+ * read by the event loop. A device that goes, as a Magic Remote may, ends its cat; the list is
+ * read again every few seconds. Off on webOS 4 and later, where GlassHouse has the key and
+ * Lightkeeper would open twice: the TV is asked its webOS version too, as a later webOS may keep
+ * its filters elsewhere (webOS 11 is not tried). With KEY_TEST present, a test on any webOS and
+ * whatever the key: the presses are logged and nothing opens, until the file goes or the TV
+ * starts again, which empties /tmp.
+ */
+var INPUT_DEVICES = process.env.LIGHTKEEPER_INPUT_DEVICES || '/proc/bus/input/devices';
+var DEV_INPUT = process.env.LIGHTKEEPER_DEV_INPUT || '/dev/input';
+var CAT = process.env.LIGHTKEEPER_CAT || '/bin/cat';
+var KEY_TEST = process.env.LIGHTKEEPER_KEY_TEST || '/tmp/lightkeeper.keytest';
+var REMOTE_EVERY = +process.env.LIGHTKEEPER_REMOTE_EVERY || 5000;
+// The codes HomeKeyBridge takes for Home: KEY_LEFTMETA, KEY_HOMEPAGE and 0x305, LG's own.
+var HOME_CODES = [125, 172, 773];
+var EV_KEY = 1;
+// A Home press this soon after the one that opened Lightkeeper is the same press on two
+// devices, or one more while it is on its way: not sent again.
+var PRESS_GAP = 1500;
+// 'open' (webOS 2 and 3, key on Home), 'test' or '' (off); readers by event name: {child, name, since}.
+var remoteMode = '', remoteReaders = {}, remoteFailed = {}, remoteSaid = 'off', lastHome = 0;
+var keyFilters = null, webosMajor = 0, webosAsks = 0, webosAsking = false, eventBytes = 0;
+
+// Bit n of a bitmap as the kernel writes it in /proc: hex words, the highest first, of `bits`
+// bits each, 32 for a 32-bit reader even on a 64-bit kernel.
+function hasBit(words, n, bits) {
+  var w = words[words.length - 1 - Math.floor(n / bits)] || '', d = w.length - 1 - Math.floor(n % bits / 4);
+  return d >= 0 && (parseInt(w.charAt(d), 16) >> n % 4 & 1) === 1;
+}
+
+// The devices to read in the text of /proc/bus/input/devices, [{event, name}]: those whose keys
+// include a Home code or, when none does, those with keys named as LG's remotes ("LGE RCU", "LGE M-RCU").
+function homeDevices(text, bits) {
+  var words = function (b, what) { var m = new RegExp('^B: ' + what + '=(.*)$', 'm').exec(b); return m ? m[1].trim().split(/\s+/) : []; };
+  var all = String(text).split(/\n\s*\n/).map(function (b) {
+    var ev = /^H: Handlers=(?:.* )?(event\d+)\b/m.exec(b), keys = words(b, 'KEY');
+    return ev && hasBit(words(b, 'EV'), EV_KEY, bits) && { event: ev[1], name: (/^N: Name="(.*)"$/m.exec(b) || [])[1] || '',
+      home: HOME_CODES.some(function (c) { return hasBit(keys, c, bits); }) };
+  }).filter(Boolean);
+  var home = all.filter(function (d) { return d.home; });
+  return (home.length ? home : all.filter(function (d) { return /\bRCU\b/.test(d.name); }))
+    .map(function (d) { return { event: d.event, name: d.name }; });
+}
+
+// The size of an input_event for the program that reads it: two times of a long each, then type,
+// code and value, so 16 bytes for a 32-bit program, 24 for a 64-bit one. From the class in the
+// ELF header of that program (cat), or node's own when the header cannot be read.
+function eventSize(head, arch) {
+  if (head && head.length > 4 && head[0] === 0x7f && head.toString('ascii', 1, 4) === 'ELF') return head[4] === 2 ? 24 : 16;
+  return /64/.test(arch) ? 24 : 16;
+}
+
+function fileHead(file) {
+  var b = Buffer.alloc ? Buffer.alloc(5) : new Buffer(5), fd;
+  try { fd = fs.openSync(file, 'r'); } catch (e) { return null; }
+  try { return fs.readSync(fd, b, 0, 5, 0) === 5 ? b : null; } catch (e) { return null; } finally { fs.closeSync(fd); }
+}
+
+// The keys pressed in what a device gave, events of `size` bytes, little-endian as on the TVs: the
+// codes of key events of value 1. Value 2 is a repeat while the key is held, 0 its release. Also
+// the bytes left over, the start of an event that comes in two pieces.
+function keyPresses(buf, size) {
+  var codes = [], i = 0, at;
+  for (; i + size <= buf.length; i += size) {
+    at = i + size - 8;
+    if (buf.readUInt16LE(at) === EV_KEY && buf.readInt32LE(at + 4) === 1) codes.push(buf.readUInt16LE(at + 2));
+  }
+  return { codes: codes, rest: buf.slice(i) };
+}
+
+function remoteWanted(test, filters, webos, key) {
+  if (test) return 'test';
+  return !filters && webos > 0 && webos < 4 && key === 'home' ? 'open' : '';
+}
+
+// Logged when it changes only, as the list of devices read.
+function remoteNote(what) {
+  if (what !== remoteSaid) log('remote: ' + what);
+  remoteSaid = what;
+}
+
+// The webOS version's first number, from the TV, asked until it answers or 30 times.
+function askWebos() {
+  if (webosMajor || webosAsking || webosAsks >= 30) return;
+  webosAsking = true;
+  luna('com.webos.service.tv.systemproperty/getSystemInfo', { keys: ['sdkVersion'] }, function (r) {
+    webosAsking = false;
+    var m = /^(\d+)\./.exec(String(r && r.sdkVersion || ''));
+    if (m) { webosMajor = +m[1]; return remoteTick(); }
+    if (++webosAsks === 30) log('remote: the TV does not say its webOS version, so the Home key is not read');
+  });
+}
+
+function remoteDevices() {
+  var text = null;
+  try { text = fs.readFileSync(INPUT_DEVICES, 'utf8'); } catch (e) {}
+  if (text !== null) return homeDevices(text, /64/.test(process.arch) ? 64 : 32);
+  return [1, 2, 3, 4].map(function (n) { return { event: 'event' + n, name: '' }; })
+    .filter(function (d) { return fs.existsSync(path.join(DEV_INPUT, d.event)); });
+}
+
+function where(d) { return d.event + (d.name ? ' (' + d.name + ')' : ''); }
+
+// With Lightkeeper already in front, a launch is a relaunch, as GlassHouse's on webOS 4 and later.
+function homePressed(d, code) {
+  var now = Date.now(), what = 'remote: Home ' + code + ' on ' + where(d);
+  if (now - lastHome < PRESS_GAP) return log(what + ', ' + (now - lastHome) + ' ms after the last: not again' + (remoteMode === 'open' ? '' : ' (test)'));
+  lastHome = now;
+  if (remoteMode !== 'open') return log(what + ': nothing opened (test)');
+  log(what + ': opening Lightkeeper');
+  luna('com.webos.applicationManager/launch', { id: APP_ID });
+}
+
+function readRemote(d) {
+  var child = spawn(CAT, [path.join(DEV_INPUT, d.event)], { stdio: ['ignore', 'pipe', 'ignore'] });
+  var r = remoteReaders[d.event] = { child: child, name: d.name, since: Date.now() }, rest = null;
+  child.stdout.on('data', function (chunk) {
+    var got = keyPresses(rest && rest.length ? Buffer.concat([rest, chunk]) : chunk, eventBytes);
+    rest = got.rest;
+    got.codes.forEach(function (c) {
+      if (HOME_CODES.indexOf(c) !== -1) homePressed(d, c);
+      else if (remoteMode === 'test') log('remote: key ' + c + ' on ' + where(d) + ' (test)');
+    });
+  });
+  // Ended by itself: a device that cannot be read is tried again half a minute later, one that went
+  // at the next look, if it is back.
+  var end = function () {
+    if (remoteReaders[d.event] !== r) return;
+    delete remoteReaders[d.event];
+    if (Date.now() - r.since >= 10000) return delete remoteFailed[d.event];
+    if (!remoteFailed[d.event]) log('remote: ' + where(d) + ' cannot be read');
+    remoteFailed[d.event] = Date.now();
+  };
+  child.on('error', end);
+  child.on('exit', end);
+}
+
+function stopRemote(event) {
+  var r = remoteReaders[event];
+  delete remoteReaders[event];
+  if (r) r.child.kill();
+}
+
+// Every REMOTE_EVERY ms, at a change of the key and once the webOS version is known.
+function remoteTick() {
+  var test = fs.existsSync(KEY_TEST);
+  if (keyFilters === null) keyFilters = fs.existsSync(KEY_FILTERS);
+  if (!test && !keyFilters && config.key === 'home') askWebos();
+  remoteMode = remoteWanted(test, keyFilters, webosMajor, config.key);
+  var cat = !!remoteMode && fs.existsSync(CAT), want = {};
+  if (cat && !eventBytes) eventBytes = eventSize(fileHead(CAT), process.arch);
+  (cat ? remoteDevices() : []).forEach(function (d) { want[d.event] = d; });
+  Object.keys(remoteReaders).forEach(function (e) { if (!want[e] || want[e].name !== remoteReaders[e].name) stopRemote(e); });
+  Object.keys(want).forEach(function (e) {
+    if (!remoteReaders[e] && Date.now() - (remoteFailed[e] || 0) >= 30000) readRemote(want[e]);
+  });
+  var list = Object.keys(want).sort().map(function (e) { return where(want[e]); });
+  if (!remoteMode) return remoteNote('off');
+  remoteNote((!cat ? 'no ' + CAT + ' to read with' : list.length ? 'reading ' + list.join(', ') + ', events of ' + eventBytes + ' bytes' :
+    'no remote with a Home key in ' + INPUT_DEVICES) + (remoteMode === 'test' ? '; a test: nothing opens' : ''));
+}
+
+// The key's word for the settings: 'reading' while the remote is read for it.
+function keyWord() { return remoteMode === 'open' && Object.keys(remoteReaders).length ? 'reading' : keyStatus; }
+
 /* ---------- Lightkeeper among the TV's inputs ---------- */
 
 /*
@@ -920,6 +1094,8 @@ function uninstall(removeApp, cb) {
       try { fs.unlinkSync(HOOK); } catch (e) {}
       try { rmrf(DATA); } catch (e) { log('uninstall: ' + e.message); }
       try { rmrf(OWN); } catch (e) {} // not the TV installer's files: not left to it to remove
+      try { fs.unlinkSync(KEY_TEST); } catch (e) {}
+      Object.keys(remoteReaders).forEach(stopRemote);
       log('uninstalled');
       if (!removeApp) return cb();
       luna('com.webos.appInstallService/dev/remove', { id: APP_ID }, function () { cb(); });
@@ -1432,7 +1608,7 @@ function handle(req, res) {
   if (m === 'GET' && p === '/api/config') {
     var c = publicConfig();
     recheckKey();
-    c.keyStatus = keyStatus;
+    c.keyStatus = keyWord();
     return send(res, 200, c, { 'Access-Control-Allow-Origin': '*' });
   }
 
@@ -1481,7 +1657,7 @@ function handle(req, res) {
     return listApps(function (apps) {
       inputChoices(apps, function (inputs) {
         send(res, 200, {
-          ok: true, apps: appChoices(apps), inputs: inputs, keyStatus: keyStatus,
+          ok: true, apps: appChoices(apps), inputs: inputs, keyStatus: keyWord(),
           keys: keysOnTv().map(function (k) { return { key: k.key, title: k.title }; }),
           glasshouse: fs.existsSync(path.join(TVWEB, 'tvweb.js'))
         });
@@ -1511,10 +1687,11 @@ function handle(req, res) {
           else if (has(change, 'preset') && config.background.custom) config.background = { custom: false, rev: (config.background.rev || 0) + 1 };
           try { saveConfig(); } catch (e) { return send(res, 500, { ok: false, error: e.message }); }
           syncOwn();
-          if (!has(change, 'key')) return send(res, 200, { ok: true, config: publicConfig(), keyStatus: keyStatus });
+          if (!has(change, 'key')) return send(res, 200, { ok: true, config: publicConfig(), keyStatus: keyWord() });
           applyKey(config.key, function (state2) {
             setKeyStatus(state2, true);
-            send(res, 200, { ok: true, config: publicConfig(), keyStatus: keyStatus });
+            remoteTick();
+            send(res, 200, { ok: true, config: publicConfig(), keyStatus: keyWord() });
           });
         });
       });
@@ -1748,14 +1925,17 @@ function start() {
   })(0);
   checkInput(0);
   setInterval(watchApp, 30000);
-  // Stopped by the boot hook (an update, a new start): the screen saver watch goes too.
+  remoteTick();
+  setInterval(remoteTick, REMOTE_EVERY);
+  // Stopped by the boot hook (an update, a new start): the screen saver watch and the remote's readers go too.
   process.on('SIGTERM', function () { process.exit(0); });
-  process.on('exit', function () { if (saverChild) saverChild.kill(); });
+  process.on('exit', function () { if (saverChild) saverChild.kill(); Object.keys(remoteReaders).forEach(stopRemote); });
 }
 
 module.exports = { DEVICES: DEVICES, DEFAULTS: DEFAULTS, CATALOG: CATALOG, webUrl: webUrl, newer: newer, readManifest: readManifest, verifyIpk: verifyIpk, validate: validate, jpegSize: jpegSize, pngSize: pngSize, isLocal: isLocal, hostOk: hostOk,
   applyKey: applyKey, iconFile: iconFile, pickBackground: pickBackground, appChoices: appChoices, openApps: openApps, fromHome: fromHome, keysOnTv: keysOnTv,
-  pinHash: pinHash, same: same, recheckEvery: recheckEvery, recheckDue: recheckDue };
+  pinHash: pinHash, same: same, recheckEvery: recheckEvery, recheckDue: recheckDue,
+  homeDevices: homeDevices, keyPresses: keyPresses, eventSize: eventSize, remoteWanted: remoteWanted };
 
 if (require.main === module) {
   if (process.argv[2] === '--uninstall') {
