@@ -640,6 +640,7 @@ footer a { color: var(--muted); }
       logoOpaque: 'The background is not transparent: no pixel can be seen through. Export the logo on a transparent background.',
       logoEmpty: 'Nothing shows: the picture is all transparent.',
       logoNotWhite: 'The logo is not white: ', logoNotWhiteEnd: '% of what shows has colour or grey. Make it all white (#FFFFFF) on the transparent background.',
+      logoBrowser: 'Your browser hands this page altered pixels, a protection against fingerprinting, so the logo can\'t be checked. Upload it from another browser, or turn the protection off for this page.',
       logoSmall: 'Too small: ', logoSmallEnd: ' pixels once the empty edges are trimmed. It needs at least 240 on its longer side.',
       logoMax: 'There are 50 logos of yours already. Remove one first.', logoRemove: 'Remove this logo',
       logoRemoveAsk: 'Remove this logo? The tiles that show it go back to their own.',
@@ -1045,6 +1046,24 @@ footer a { color: var(--muted); }
     return w;
   }
 
+  // Some browsers hand pages altered pixels, against fingerprinting (#17): stripes of known
+  // colours, drawn here and read back, come back changed.
+  function pixelsAltered() {
+    var c = document.createElement('canvas'), g, px, i, k;
+    c.width = c.height = 64;
+    g = c.getContext('2d');
+    for (k = 0; k < 8; k++) {
+      g.fillStyle = 'rgb(' + k * 36 + ',' + (255 - k * 36) + ',255)';
+      g.fillRect(k * 8, 0, 8, 64);
+    }
+    px = g.getImageData(0, 0, 64, 64).data;
+    for (i = 0; i < px.length; i += 4) {
+      k = (i / 4 % 64) >> 3;
+      if (px[i] !== k * 36 || px[i + 1] !== 255 - k * 36 || px[i + 2] !== 255 || px[i + 3] !== 255) return true;
+    }
+    return false;
+  }
+
   /*
    * A logo of yours, as the page and the README ask for it: a PNG, white on transparency,
    * at least 240 pixels on its longer side. cb(what is wrong), or cb(null, png) trimmed to
@@ -1080,9 +1099,9 @@ footer a { color: var(--muted); }
           // White, but for the soft pixels at the edges.
           if (a >= 128) { shown++; if (Math.min(px[j], px[j + 1], px[j + 2]) < 225) grey++; }
         }
-        if (!clear) return cb(t.logoOpaque);
-        if (x1 < 0) return cb(t.logoEmpty);
-        if (grey > shown * 0.02) return cb(t.logoNotWhite + Math.max(3, Math.round(grey * 100 / shown)) + t.logoNotWhiteEnd);
+        var bad = !clear ? t.logoOpaque : x1 < 0 ? t.logoEmpty :
+          grey > shown * 0.02 ? t.logoNotWhite + Math.max(3, Math.round(grey * 100 / shown)) + t.logoNotWhiteEnd : null;
+        if (bad) return cb(pixelsAltered() ? t.logoBrowser : bad);
         var bw = x1 - x0 + 1, bh = y1 - y0 + 1;
         if (Math.max(bw, bh) < 240) return cb(t.logoSmall + bw + ' × ' + bh + t.logoSmallEnd);
         var k = Math.min(1, 240 / bh, 2000 / bw), out = document.createElement('canvas');
