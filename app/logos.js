@@ -448,21 +448,33 @@ function riquadro(nome) {
  * An app the logos above do not cover, in white all the same: its icon from the
  * TV with its most common colour, the background, taken away and the rest made
  * white. cb(img) with a white picture cropped to the drawing, or cb(null) where
- * the icon cannot be read, and the TV's own icon is shown instead. The icon is
- * asked for as data (url&data=1): a canvas may read a data: picture from any
- * page, which it may not do with one loaded from the server by the Home's file://.
+ * the icon cannot be read, and the TV's own icon is shown instead.
  */
 var bianche = {};
 function iconaBianca(url, cb) {
   if (bianche[url]) return cb(fatta(bianche[url]));
+  datiIcona(url, function (src) {
+    if (src) disegnaBianca(url, src, cb);
+    else cb(null);
+  });
+}
+
+/*
+ * The icon as data (url&data=1), asked once for each address: a canvas may read a
+ * data: picture from any page, which it may not do with one loaded from the server
+ * by the Home's file://; and the Home keeps it as it is. cb(src), or cb(null).
+ */
+var datiIcone = {};
+function datiIcona(url, cb) {
+  if (datiIcone[url]) return cb(datiIcone[url]);
   var x = new XMLHttpRequest();
   x.open('GET', url + (url.indexOf('?') === -1 ? '?' : '&') + 'data=1');
   x.timeout = 8000;
   x.onload = function () {
     var r = null;
     try { r = JSON.parse(x.responseText); } catch (e) {}
-    if (!r || !r.src) return cb(null);
-    disegnaBianca(url, r.src, cb);
+    if (r && r.src) datiIcone[url] = r.src;
+    cb(datiIcone[url] || null);
   };
   x.onerror = x.ontimeout = function () { cb(null); };
   x.send();

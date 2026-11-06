@@ -309,8 +309,10 @@ function iconaTv(url) {
 
 /*
  * What fills a tile's place for its picture: its logo; else, with logos chosen, the
- * app's icon made white; else the TV's own icon. The icon is asked for only once,
- * with CORS: a copy loaded plainly first would taint the canvas.
+ * app's icon made white; else the TV's own icon. Icons come from the server, which at
+ * power on is up well after the Home: a tile's is kept here as data, shown at once the
+ * next time, and changed when the server's differs. Kept for tiles only, not for the
+ * open apps' panel.
  */
 function riempi(box, v, modo) {
   return function () {
@@ -318,12 +320,52 @@ function riempi(box, v, modo) {
     if (logo && modo === 'icon' && (v.logo || entitaCasa(v))) return box.parentNode.replaceChild(riquadro(logo), box);
     if (logo) return box.appendChild(disegnaLogo(logo, 80, 176, 96));
     var url = server() + '/icon?id=' + encodeURIComponent(v.id) + '&s=' + (cfg.started || 0);
-    if (modo !== 'logo') return box.parentNode.replaceChild(iconaTv(url), box);
+    var chiave = 'icon ' + modo + ' ' + v.id, tessera = (cfg.tiles || []).indexOf(v) !== -1, t = null;
+    try { t = JSON.parse(localStorage.getItem(chiave)); } catch (e) {}
+    function nuova(b) { if (tessera && (!t || t.src !== b.src)) tieni(chiave, JSON.stringify(b)); }
+    if (modo !== 'logo') {
+      var img = iconaTv(t ? t.src : url);
+      box.parentNode.replaceChild(img, box);
+      return datiIcona(url, function (src) {
+        if (!src) return;
+        nuova({ src: src });
+        if (t && t.src !== src) img.src = src;
+      });
+    }
+    if (t) box.appendChild(misuraBianca(fatta(t), 80, 176, 96));
     iconaBianca(url, function (w) {
-      if (w) box.appendChild(misuraBianca(w, 80, 176, 96));
-      else if (box.parentNode) box.parentNode.replaceChild(iconaTv(url), box);
+      if (!w) {
+        if (!t && box.parentNode) box.parentNode.replaceChild(iconaTv(url), box);
+        return;
+      }
+      nuova(bianche[url]);
+      if (t && t.src === bianche[url].src) return;
+      box.innerHTML = '';
+      box.appendChild(misuraBianca(w, 80, 176, 96));
     });
   };
+}
+
+/*
+ * Kept for the next start. When the storage is full, the icons kept go before the
+ * config does: without the config, everything would wait for the server.
+ */
+function tieni(chiave, testo) {
+  try { localStorage.setItem(chiave, testo); } catch (e) {
+    if (chiave !== 'config') return;
+    togliIcone({});
+    try { localStorage.setItem(chiave, testo); } catch (e2) {}
+  }
+}
+
+// The icons kept, but for those named in resta.
+function togliIcone(resta) {
+  try {
+    for (var k = localStorage.length - 1; k >= 0; k--) {
+      var n = localStorage.key(k);
+      if (/^icon /.test(n) && !resta[n]) localStorage.removeItem(n);
+    }
+  } catch (e) {}
 }
 
 // Up to fifty tiles: pictures are drawn as they come within a screen of view, not all at once.
@@ -404,6 +446,7 @@ function disegna() {
   if (cfg.openApps) voci.push({ aperte: true });
   // Without tiles the gear stays, as the Home would have nothing to choose.
   if (!cfg.hideGear || !(cfg.tiles || []).length) voci.push({ gear: true });
+  var resta = {}; // the icons kept for these tiles in this style; the others go
   voci.forEach(function (v, i) {
     var a = document.createElement('a');
     if (v.gear) {
@@ -418,6 +461,7 @@ function disegna() {
         box.className = 'logo';
         a.appendChild(box);
         caricatori[i] = riempi(box, v, modo);
+        resta['icon ' + modo + ' ' + v.id] = true;
       }
       // The name stays for screen readers when it is not shown.
       a.setAttribute('aria-label', v.title);
@@ -430,6 +474,7 @@ function disegna() {
     tessere.push(a);
     riga(i).appendChild(a);
   });
+  togliIcone(resta);
   posiziona();
   veil.className = (cfg.clockSide === 'right' ? 'dx' : '') + (seconda ? ' due' + (modo === 'text' ? ' nomi' : '') : '');
   veil.style.opacity = (typeof cfg.veil === 'number' ? cfg.veil : 80) / 100;
@@ -809,7 +854,7 @@ function leggi(cb) {
     if (j !== shown) {
       shown = j;
       cfg = c;
-      try { localStorage.setItem('config', j); } catch (e) {}
+      tieni('config', j);
       disegna();
       chiediAperte(); // the button may have been turned on or off
     }

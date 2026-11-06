@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **The icons Lightkeeper's server gives show at once when the TV comes on.** As reported on Reddit, two icons, PlxNative's and the Homebrew Channel's, were slow to appear: 13 seconds after a cold start, and noticeably late after a warm start or the Home key. Neither app has a logo of Lightkeeper's, so the Home takes its icon from Lightkeeper's server, made white with logos and as it is with *App icons*; with *App icons*, every app's icon comes from the server. On a C1 with webOS 6.5.3, on 30 October, the server was up 11 to 12 seconds after the Home was on screen. The Home now keeps each tile's icon as it last drew it, white or not, in its own storage, and draws it from there at once the next time; it still asks the server, and draws the server's icon instead when it differs, as after an update of the app. A tile taken away, or a change of style, takes its icon away. When the storage is full, the icons give way to the Home's config, never the other way round. Not kept as a file beside the Home, as the picture of your own is since 1.0.14: a picture loaded from a file may be unreadable to the canvas that makes an icon white, as it is in Chrome on a computer, and the TV's engine was not tried. The logos you upload still come from the server. Tried in a computer's browser against the stand-in TV, with the server stopped: the white icon and the app icons showed from what the Home had kept, and without them the white icon's place stayed empty, as in 1.1.0. Not tried on a TV.
+
 ## 1.1.0 (5 November 2026)
 
 - **The Home key on webOS 2 and 3.** These TVs have no key filters for GlassHouse to use, so up to 1.0.14 the key stayed LG's. Lightkeeper now reads it from the remote itself. The idea comes from [HomeKeyBridge](https://github.com/knives69/HomeKeyBridge), by Deko1988uwu on Reddit (knives69 on GitHub); Lightkeeper's code for it is its own.

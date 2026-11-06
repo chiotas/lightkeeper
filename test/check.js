@@ -572,6 +572,96 @@ assert.deepEqual(chieste, [dove[0]]); assert.equal(fondi.document.body.style.bac
 copie[dove[0]] = true;
 fondi.sfondo(dove[0], dove[1]); // the copy made: shown from then on, also at power on
 assert.equal(fondi.document.body.style.backgroundImage, 'url(own/my-0123abcd.jpg)');
+// The tiles' icons from the server, kept by the Home as data: shown at once the next time, before
+// the server answers, and changed when the server's differs; not kept for the open apps' panel.
+// The server answers when told to (rispondi), with the icon given or none, as when it is not up.
+var ls = {}, scritte = 0, spazio = 1e9, attese = [];
+function usato() { return Object.keys(ls).reduce(function (n, k) { return n + k.length + ls[k].length; }, 0); }
+var icone = {
+  cfg: { tiles: [], started: 1 }, server: fondi.server, bianche: {},
+  localStorage: {
+    getItem: function (k) { return ls.hasOwnProperty(k) ? ls[k] : null; },
+    setItem: function (k, v) {
+      if (usato() - (ls[k] || '').length + (ls.hasOwnProperty(k) ? 0 : k.length) + v.length > spazio) throw new Error('QuotaExceededError');
+      scritte++; ls[k] = v;
+    },
+    removeItem: function (k) { delete ls[k]; },
+    key: function (i) { return Object.keys(ls)[i]; },
+    get length() { return Object.keys(ls).length; }
+  },
+  document: { createElement: function () { return { style: {} }; } },
+  logoDi: function () { return ''; }, entitaCasa: function () { return null; },
+  fatta: function (b) { return { src: b.src }; }, misuraBianca: function (img) { return img; },
+  iconaBianca: function (url, cb) {
+    attese.push(function (src) { if (!src) return cb(null); icone.bianche[url] = { src: 'white ' + src, w: 9, h: 9 }; cb(icone.fatta(icone.bianche[url])); });
+  },
+  datiIcona: function (url, cb) { attese.push(cb); }
+};
+function rispondi(src) { attese.splice(0).forEach(function (f) { f(src); }); }
+function casella() {
+  var b = { figli: [], appendChild: function (c) { b.figli.push(c); return c; } };
+  Object.defineProperty(b, 'innerHTML', { set: function () { b.figli = []; } });
+  b.parentNode = { replaceChild: function (n) { b.al = n; } };
+  return b;
+}
+vm.runInNewContext(homeHtml.slice(homeHtml.indexOf('function iconaTv('), homeHtml.indexOf('\n// Up to fifty tiles')), icone);
+var app = { id: 'some.app', title: 'Some App' }, box;
+icone.cfg.tiles = [app];
+// With logos: nothing kept, the server not up yet, as up to 1.1.0: the TV's icon from the server, which fails.
+icone.riempi(box = casella(), app, 'logo')();
+rispondi(null);
+assert.equal(box.al.src, 'http://127.0.0.1:8090/icon?id=some.app&s=1'); assert.deepEqual(ls, {});
+// The server up: its icon made white, shown and kept.
+icone.cfg.started = 2;
+icone.riempi(box = casella(), app, 'logo')();
+assert.equal(box.figli.length, 0);
+rispondi('A');
+assert.equal(box.figli[0].src, 'white A');
+assert.deepEqual(JSON.parse(ls['icon logo some.app']), { src: 'white A', w: 9, h: 9 });
+// The next power on: the one kept, at once, and still there when the server does not answer.
+icone.riempi(box = casella(), app, 'logo')();
+assert.equal(box.figli[0].src, 'white A');
+rispondi(null);
+assert.equal(box.figli.length, 1); assert.equal(box.figli[0].src, 'white A'); assert.ok(!box.al);
+// The server up with the same icon: nothing drawn again, nothing written.
+scritte = 0;
+icone.riempi(box = casella(), app, 'logo')();
+var prima = box.figli[0];
+rispondi('A');
+assert.equal(box.figli[0], prima); assert.equal(scritte, 0);
+// The app updated with another icon: that one, kept instead.
+icone.riempi(box = casella(), app, 'logo')();
+rispondi('B');
+assert.equal(box.figli.length, 1); assert.equal(box.figli[0].src, 'white B');
+assert.equal(JSON.parse(ls['icon logo some.app']).src, 'white B');
+// An open app in the panel, not a tile: shown, not kept.
+icone.riempi(box = casella(), { id: 'other.app', title: 'Other' }, 'logo')();
+rispondi('C');
+assert.equal(box.figli[0].src, 'white C'); assert.ok(!ls['icon logo other.app']);
+// With app icons: the server's at first, kept; then the one kept at once; then the server's when it differs.
+icone.riempi(box = casella(), app, 'icon')();
+assert.equal(box.al.src, 'http://127.0.0.1:8090/icon?id=some.app&s=2');
+rispondi('data:D');
+assert.deepEqual(JSON.parse(ls['icon icon some.app']), { src: 'data:D' });
+icone.riempi(box = casella(), app, 'icon')();
+assert.equal(box.al.src, 'data:D');
+rispondi(null);
+assert.equal(box.al.src, 'data:D');
+icone.riempi(box = casella(), app, 'icon')();
+rispondi('data:E');
+assert.equal(box.al.src, 'data:E'); assert.equal(JSON.parse(ls['icon icon some.app']).src, 'data:E');
+// A tile taken away, or another style: its icon goes; the rest of what the Home keeps stays.
+ls.config = '{}'; ls.port = '8090'; ls['icon logo gone.app'] = '{}';
+icone.togliIcone({ 'icon logo some.app': true });
+assert.deepEqual(Object.keys(ls).sort(), ['config', 'icon logo some.app', 'port']);
+assert.ok(/togliIcone\(resta\);/.test(homeHtml) && /resta\['icon ' \+ modo \+ ' ' \+ v\.id\] = true;/.test(homeHtml), 'the Home lets go of the icons of tiles gone');
+// The storage full: an icon is not kept, and the config is, in the icons' place.
+spazio = usato() + 10;
+icone.tieni('icon logo new.app', JSON.stringify({ src: 'a long icon, more than ten' }));
+assert.ok(!ls['icon logo new.app']);
+icone.tieni('config', '{"tiles":[1,2,3]}');
+assert.equal(ls.config, '{"tiles":[1,2,3]}'); assert.ok(!ls['icon logo some.app']);
+assert.ok(/tieni\('config', j\);/.test(homeHtml), 'the Home keeps its config before the icons');
 // On the left as always; on the right, the clock and the weather moved by their ink's distance from the edge.
 function finto(testo, piccolo) {
   return { style: {}, textContent: testo, getElementsByTagName: function (t) { return t === 'small' && piccolo ? [piccolo] : []; } };
