@@ -398,12 +398,13 @@ function disegna() {
   trasla(navSopra, 0);
   caricatori = [];
   tessere = [];
-  seconda = inizioSeconda(cfg);
+  var visibili = tessereVisibili(cfg);
+  seconda = visibili.seconda;
   navSopra.className = seconda ? nav.className : '';
-  voci = (cfg.tiles || []).slice();
+  voci = visibili.tiles.slice();
   if (cfg.openApps) voci.push({ aperte: true });
   // Without tiles the gear stays, as the Home would have nothing to choose.
-  if (!cfg.hideGear || !(cfg.tiles || []).length) voci.push({ gear: true });
+  if (!cfg.hideGear || !visibili.tiles.length) voci.push({ gear: true });
   voci.forEach(function (v, i) {
     var a = document.createElement('a');
     if (v.gear) {

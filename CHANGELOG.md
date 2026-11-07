@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **A tile whose app is no longer on the TV leaves the Home** ([#19](https://github.com/chiotas/lightkeeper/issues/19)). As reported on an LG 55NANO796PC with webOS 6.5.3 and Lightkeeper 1.1.0, an app uninstalled left its tile on the Home, without its icon, through several restarts of the TV. The Home drew the tiles as they were saved, and nothing compared them with the apps on the TV; Lightkeeper's server had no icon to give for an app the TV no longer lists. The server now compares the tiles with the TV's list of apps, asked again at most once a minute when the Home reads its config, and the Home leaves out a tile whose app is not in the list. The tile stays in the settings, marked *Not installed on the TV* and left out of the preview, and it is back on the Home by itself when the app is installed again. Until the TV has given its list, every tile shows, as before. Inputs, Live TV, web pages and Home Assistant's tiles are never left out. With *Two rows*, the lower row starts after the same tiles as before. Tried in the checks, and in a computer's browser against the stand-in TV, with an app taken out of its list and put back: its tile left the Home and came back within a minute. Not tried on a TV.
+
 ## 1.1.0 (5 November 2026)
 
 - **The Home key on webOS 2 and 3.** These TVs have no key filters for GlassHouse to use, so up to 1.0.14 the key stayed LG's. Lightkeeper now reads it from the remote itself. The idea comes from [HomeKeyBridge](https://github.com/knives69/HomeKeyBridge), by Deko1988uwu on Reddit (knives69 on GitHub); Lightkeeper's code for it is its own.

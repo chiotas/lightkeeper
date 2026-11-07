@@ -593,7 +593,7 @@ footer a { color: var(--muted); }
       webName: 'Web page', webAdd: 'Add page', webNoName: 'Give the page a name.',
       webBadUrl: 'An address starts with http:// or https://, then the site, without spaces.', onWeb: 'Opens ',
       add: 'Add a tile…', apps: 'Apps', inputs: 'Inputs', up: 'Move up', down: 'Move down', drop: 'Remove',
-      nameOnTv: 'Name on the TV', onTv: 'On the TV: ', empty: 'No tiles yet. Add the apps and inputs you use most.',
+      nameOnTv: 'Name on the TV', onTv: 'On the TV: ', notOnTv: 'Not installed on the TV', empty: 'No tiles yet. Add the apps and inputs you use most.',
       full: 'Fifty tiles at most.', drag: 'Drag to move', labels: 'Names under them', labelsAll: 'All', labelsSel: 'Selected', labelsNone: 'None',
       twoRows: 'Two rows', twoRowsLede: 'Move New row in the list above to choose where the lower row starts. Down on the upper row goes to the lower one; on the lower row it opens LG\'s Home, as before.',
       newRow: 'New row', newRowSub: 'The tiles after it make the lower row', show: 'Show', names: 'Names', logos: 'Logos', icons: 'App icons', background: 'Background',
@@ -758,7 +758,7 @@ footer a { color: var(--muted); }
     $('p-ora').innerHTML = clockText();
     $('p-ora').className = 'ora ' + classeOra(cfg);
     $('p-ora').parentNode.className = cfg.clockSide === 'right' ? 'dx' : '';
-    var seconda = inizioSeconda(cfg), testo = cfg.tileStyle !== 'logo' && cfg.tileStyle !== 'icon';
+    var visibili = tessereVisibili(cfg), seconda = visibili.seconda, testo = cfg.tileStyle !== 'logo' && cfg.tileStyle !== 'icon';
     $('p-veil').className = 'veil' + (cfg.clockSide === 'right' ? ' dx' : '') + (seconda ? ' due' + (testo ? ' nomi' : '') : '');
     meteo();
     haPreview();
@@ -768,7 +768,8 @@ footer a { color: var(--muted); }
     nav2.className = seconda ? nav.className : '';
     $('labels-row').hidden = modo === 'text';
     nav.innerHTML = nav2.innerHTML = '';
-    (cfg.tiles || []).forEach(function (tile, i) {
+    // As on the Home, without the tiles whose app the TV no longer lists.
+    visibili.tiles.forEach(function (tile, i) {
       var s = document.createElement('span');
       if (i === 0) s.className = 'sel';
       var logo = modo === 'text' ? '' : logoDi(tile, modo);
@@ -790,10 +791,10 @@ footer a { color: var(--muted); }
       (i < seconda ? nav2 : nav).appendChild(s);
     });
     // Hidden if asked, unless there are no tiles.
-    if (!cfg.hideGear || !(cfg.tiles || []).length) {
+    if (!cfg.hideGear || !visibili.tiles.length) {
       var g = document.createElement('span');
       g.innerHTML = GEAR;
-      g.className = 'gear' + ((cfg.tiles || []).length ? '' : ' sel');
+      g.className = 'gear' + (visibili.tiles.length ? '' : ' sel');
       nav.appendChild(g);
     }
     // Two rows: the upper one above the lower, as on the Home.
@@ -1278,6 +1279,12 @@ footer a { color: var(--muted); }
         sub.className = 'sub';
         sub.textContent = t.onTv + orig;
         name.appendChild(sub);
+      }
+      if ((cfg.appsGone || []).indexOf(tile.id) !== -1) {
+        var manca = document.createElement('span');
+        manca.className = 'sub';
+        manca.textContent = t.notOnTv;
+        name.appendChild(manca);
       }
       if (eIngresso(tile.id)) {
         var dev = document.createElement('select');

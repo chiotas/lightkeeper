@@ -234,6 +234,7 @@ function publicConfig() {
   c.started = STARTED;
   c.backgroundNow = sessionBackground();
   c.inputStatus = inputStatus;
+  c.appsGone = appsGone(config.tiles, appsCache);
   return c;
 }
 
@@ -539,7 +540,7 @@ function pinOk(req) {
 
 /* ---------- what the TV has ---------- */
 
-var appsCache = null, appsAt = 0;
+var appsCache = null, appsAt = 0, appsAsked = false;
 
 function listApps(cb) {
   if (appsCache && Date.now() - appsAt < 60000) return cb(appsCache);
@@ -550,6 +551,18 @@ function listApps(cb) {
 }
 
 function isInput(id) { return /^com\.webos\.app\.(hdmi|livetv$)/.test(id); }
+
+// The tiles whose app the TV does not list (#19): the Home leaves them out, the settings keep
+// them, so a tile comes back with its app. None while the list is not known; never an input,
+// Live TV, a web page or a Home Assistant tile.
+function appsGone(tiles, apps) {
+  if (!apps) return [];
+  var on = {};
+  apps.forEach(function (a) { if (a) on[a.id] = true; });
+  return (tiles || []).map(function (t) { return t.id; }).filter(function (id) {
+    return !on[id] && !isInput(id) && !/^(web|ha)\./.test(id);
+  });
+}
 
 // The logos and icons Lightkeeper draws, by name, from logos.js itself: a tile may pick one.
 var CATALOG = (function () {
@@ -1606,6 +1619,8 @@ function handle(req, res) {
   // The Home reads this from its own file:// page, so any origin may read it;
   // it holds nothing secret.
   if (m === 'GET' && p === '/api/config') {
+    // The apps asked again at most once a minute, and not waited for: Luna may be slow after power on.
+    if (!appsAsked) { appsAsked = true; listApps(function () { appsAsked = false; }); }
     var c = publicConfig();
     recheckKey();
     c.keyStatus = keyWord();
@@ -1933,7 +1948,7 @@ function start() {
 }
 
 module.exports = { DEVICES: DEVICES, DEFAULTS: DEFAULTS, CATALOG: CATALOG, webUrl: webUrl, newer: newer, readManifest: readManifest, verifyIpk: verifyIpk, validate: validate, jpegSize: jpegSize, pngSize: pngSize, isLocal: isLocal, hostOk: hostOk,
-  applyKey: applyKey, iconFile: iconFile, pickBackground: pickBackground, appChoices: appChoices, openApps: openApps, fromHome: fromHome, keysOnTv: keysOnTv,
+  applyKey: applyKey, iconFile: iconFile, appsGone: appsGone, pickBackground: pickBackground, appChoices: appChoices, openApps: openApps, fromHome: fromHome, keysOnTv: keysOnTv,
   pinHash: pinHash, same: same, recheckEvery: recheckEvery, recheckDue: recheckDue,
   homeDevices: homeDevices, keyPresses: keyPresses, eventSize: eventSize, remoteWanted: remoteWanted };
 
