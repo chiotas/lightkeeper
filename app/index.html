@@ -281,9 +281,10 @@ function seleziona(i, colPuntatore) {
     caricaVisibili();
     frecce();
   }
-  var t = TEXT;
-  if (voci[sel] && voci[sel].gear) {
-    hint.textContent = (voci.length === 1 ? t.empty : t.settings) +
+  // Why the setup failed, until a server of this version answers; on the Home's line, whatever is chosen.
+  var t = TEXT, avviso = cfg.version !== APP_VERSION && setupFallito;
+  if (avviso || voci[sel] && voci[sel].gear) {
+    hint.textContent = avviso || (voci.length === 1 ? t.empty : t.settings) +
       (cfg.address ? ' · ' + t.phone + cfg.address + ':' + (cfg.port || porta) : '');
     hint.className = 'on';
   } else {
@@ -824,11 +825,24 @@ function leggi(cb) {
  * Homebrew Channel, which runs as root, is asked to put it in place: once per
  * launch, as the server may simply not have started yet after a cold boot.
  */
-var setupFatto = false;
+var setupFatto = false, setupFallito = '';
 function setup() {
   if (setupFatto || !window.PalmServiceBridge) return;
   setupFatto = true;
-  luna(EXEC, { command: 'sh "' + APP_DIR + '/service/setup.sh"' }, function () { leggi(); });
+  luna(EXEC, { command: 'sh "' + APP_DIR + '/service/setup.sh"' }, function (r) {
+    setupFallito = esitoSetup(r);
+    if (setupFallito) seleziona(sel);
+    leggi();
+  });
+}
+// The Homebrew Channel's answer to setup.sh: why it did not run, as a line for the Home, or '' if it did.
+// returnValue false: exec refused, or sh failed; else setup.sh's last line, {"ok":false,"error":...} when it fails.
+function esitoSetup(r) {
+  if (!r) return '';
+  if (r.returnValue === false) return 'The Homebrew Channel would not run the setup' + (r.errorText ? ': ' + String(r.errorText).split('\n')[0] : '');
+  var righe = String(r.stdoutString || '').replace(/\s+$/, '').split('\n'), esito = null;
+  try { esito = JSON.parse(righe[righe.length - 1]); } catch (e) {}
+  return esito && esito.ok === false ? 'Setup failed' + (esito.error ? ': ' + esito.error : '') : '';
 }
 
 function controlla(prove) {

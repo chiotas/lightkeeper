@@ -205,6 +205,37 @@ var refusing = path.join(tmp, 'luna-send-refusing');
 fs.writeFileSync(refusing, '#!/bin/sh\necho \'{"returnValue":false,"errorText":"ipk verified failed"}\'\n', { mode: 493 });
 var refused = runUpdater(refusing);
 assert.equal(refused.state, 'failed'); assert.ok(/ipk verified failed/.test(refused.error), refused.error);
+// setup.sh (#14, #15): ok only with root and the boot hook in place, else the reason. From a copy of the
+// service whose hook does nothing, never the real one on a computer; without LIGHTKEEPER_UID, id's own answer.
+var setupDir = path.join(tmp, 'setup-app', 'service'), hookDir = path.join(tmp, 'init.d');
+fs.mkdirSync(path.dirname(setupDir)); fs.mkdirSync(setupDir); fs.mkdirSync(hookDir);
+fs.writeFileSync(path.join(setupDir, 'setup.sh'), fs.readFileSync(path.join(__dirname, '..', 'app', 'service', 'setup.sh')));
+fs.writeFileSync(path.join(setupDir, 'lightkeeper-init'), '#!/bin/sh\n');
+fs.writeFileSync(path.join(setupDir, 'server.js'), '');
+function runSetup(more) {
+  return require('child_process').execFileSync('sh', [path.join(setupDir, 'setup.sh')], { stdio: ['ignore', 'pipe', 'ignore'],
+    env: Object.assign({}, process.env, { LIGHTKEEPER_HOOKDIR: hookDir, LIGHTKEEPER_NODE: process.execPath, LIGHTKEEPER_DATA: path.join(tmp, 'setup-data') }, more) }).toString();
+}
+var noRoot = runSetup({});
+assert.equal(noRoot, '{"ok":false,"error":"the Homebrew Channel is not running as root"}\n', 'run by this computer\'s user');
+assert.ok(!fs.existsSync(path.join(hookDir, '60-lightkeeper')));
+fs.chmodSync(hookDir, 365); // r-x: the link cannot go in
+var noLink = runSetup({ LIGHTKEEPER_UID: '0' });
+fs.chmodSync(hookDir, 493);
+assert.equal(noLink, '{"ok":false,"error":"could not put the boot hook in place"}\n');
+assert.equal(runSetup({ LIGHTKEEPER_UID: '0' }), '{"ok":true}\n', 'as before');
+assert.equal(fs.readlinkSync(path.join(hookDir, '60-lightkeeper')), path.join(setupDir, 'lightkeeper-init'));
+// The Home reads the Homebrew Channel's answer to it: the line it shows, or '' when the setup ran.
+var homeScript = fs.readFileSync(path.join(__dirname, '..', 'app', 'index.html'), 'utf8'), esiti = {};
+require('vm').runInNewContext(homeScript.slice(homeScript.indexOf('function esitoSetup'), homeScript.indexOf('\nfunction controlla(')), esiti);
+assert.equal(esiti.esitoSetup({ returnValue: true, stdoutString: '{"ok":true}\n' }), '');
+assert.equal(esiti.esitoSetup({ returnValue: true, stdoutString: noRoot }), 'Setup failed: the Homebrew Channel is not running as root');
+assert.equal(esiti.esitoSetup({ returnValue: true, stdoutString: 'chmod: denied\n' + noLink }), 'Setup failed: could not put the boot hook in place');
+assert.equal(esiti.esitoSetup({ returnValue: false, errorText: 'Command failed: sh x\nsh: x: not found' }), 'The Homebrew Channel would not run the setup: Command failed: sh x');
+assert.equal(esiti.esitoSetup({ returnValue: false }), 'The Homebrew Channel would not run the setup');
+[null, {}, { returnValue: true }, { returnValue: true, stdoutString: 'not json' }].forEach(function (r) { assert.equal(esiti.esitoSetup(r), '', JSON.stringify(r)); });
+assert.ok(/function \(r\) \{\n    setupFallito = esitoSetup\(r\);\n    if \(setupFallito\) seleziona\(sel\);\n    leggi\(\);/.test(homeScript), 'setup() shows it');
+assert.ok(/hint\.textContent = avviso \|\| /.test(homeScript), 'on the Home\'s line');
 
 // The Home loads logos.js and then its own script into one global scope: a name
 // declared in both overwrites the first (issue #2, the Home's weather icons were ICONE).
