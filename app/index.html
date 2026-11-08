@@ -838,11 +838,13 @@ function setup() {
 // The Homebrew Channel's answer to setup.sh: why it did not run, as a line for the Home, or '' if it did.
 // returnValue false: exec refused, or sh failed; else setup.sh's last line, {"ok":false,"error":...} when it fails.
 function esitoSetup(r) {
+  // The line does not wrap: a long reason is cut, so it stays on the screen.
+  function motivo(m) { m = String(m).split('\n')[0]; return ': ' + (m.length > 80 ? m.slice(0, 79) + '\u2026' : m); }
   if (!r) return '';
-  if (r.returnValue === false) return 'The Homebrew Channel would not run the setup' + (r.errorText ? ': ' + String(r.errorText).split('\n')[0] : '');
+  if (r.returnValue === false) return 'The Homebrew Channel would not run the setup' + (r.errorText ? motivo(r.errorText) : '');
   var righe = String(r.stdoutString || '').replace(/\s+$/, '').split('\n'), esito = null;
   try { esito = JSON.parse(righe[righe.length - 1]); } catch (e) {}
-  return esito && esito.ok === false ? 'Setup failed' + (esito.error ? ': ' + esito.error : '') : '';
+  return esito && esito.ok === false ? 'Setup failed' + (esito.error ? motivo(esito.error) : '') : '';
 }
 
 function controlla(prove) {

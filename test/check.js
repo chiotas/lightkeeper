@@ -230,6 +230,7 @@ var homeScript = fs.readFileSync(path.join(__dirname, '..', 'app', 'index.html')
 require('vm').runInNewContext(homeScript.slice(homeScript.indexOf('function esitoSetup'), homeScript.indexOf('\nfunction controlla(')), esiti);
 assert.equal(esiti.esitoSetup({ returnValue: true, stdoutString: '{"ok":true}\n' }), '');
 assert.equal(esiti.esitoSetup({ returnValue: true, stdoutString: noRoot }), 'Setup failed: the Homebrew Channel is not running as root');
+assert.equal(esiti.esitoSetup({ returnValue: false, errorText: new Array(201).join('x') }).length, 46 + 80, 'a long reason is cut to stay on the line');
 assert.equal(esiti.esitoSetup({ returnValue: true, stdoutString: 'chmod: denied\n' + noLink }), 'Setup failed: could not put the boot hook in place');
 assert.equal(esiti.esitoSetup({ returnValue: false, errorText: 'Command failed: sh x\nsh: x: not found' }), 'The Homebrew Channel would not run the setup: Command failed: sh x');
 assert.equal(esiti.esitoSetup({ returnValue: false }), 'The Homebrew Channel would not run the setup');
