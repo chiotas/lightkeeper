@@ -164,6 +164,14 @@ var runningNow = { returnValue: true, running: ['youtube.leanback.v4', 'com.webo
 assert.deepEqual(s.openApps(runningNow, tvApps), [{ id: 'netflix', title: 'Netflix' }, { id: 'youtube.leanback.v4', title: 'YouTube' }]);
 assert.deepEqual(s.openApps(null, tvApps), []);
 assert.deepEqual(s.openApps({ running: [{ appId: 'netflix' }, null, 'netflix'] }, tvApps), []);
+// A tile whose app the TV no longer lists (#19) is gone from the Home; none while the list is not
+// known; never an input, Live TV, a web page or a Home Assistant tile, listed or not.
+var tilesNow = ['netflix', 'com.spotify.app', 'cdp-30', 'com.webos.app.hdmi4', 'com.webos.app.livetv', 'web.k3x9', 'ha.light.sala']
+  .map(function (id) { return { id: id, title: id }; });
+assert.deepEqual(s.appsGone(tilesNow, tvApps), ['com.spotify.app']);
+assert.deepEqual(s.appsGone(tilesNow, [{ id: 'netflix' }]), ['com.spotify.app', 'cdp-30']);
+assert.deepEqual(s.appsGone(tilesNow, null), []);
+assert.deepEqual(s.appsGone(null, tvApps), []);
 // Asked by the Home only: from the TV itself, by its file:// page or one on the TV's own servers.
 function fromHome(addr, origin) { return s.fromHome({ socket: { remoteAddress: addr }, headers: origin === undefined ? {} : { origin: origin } }); }
 assert.ok(fromHome('127.0.0.1', 'null') && fromHome('::ffff:127.0.0.1', 'null') && fromHome('::1', 'file://'));
@@ -508,6 +516,20 @@ var otto = [1, 2, 3, 4, 5, 6, 7, 8].map(function (n) { return { id: 'app' + n, t
 assert.equal(logos.inizioSeconda({ tiles: otto, twoRows: true, rowBreak: 3 }), 3);
 [null, 0, 8, 9, 2.5, '3'].forEach(function (k) { assert.equal(logos.inizioSeconda({ tiles: otto, twoRows: true, rowBreak: k }), 0, String(k)); });
 assert.equal(logos.inizioSeconda({ twoRows: true, rowBreak: 1 }), 0); // no tiles
+// The Home without the tiles whose app is gone (#19): the same tile objects, and the lower row
+// after the same tiles; one row when either row is left empty.
+function visibili(gone, on, k) {
+  var v = logos.tessereVisibili({ tiles: otto, appsGone: gone, twoRows: on, rowBreak: k });
+  v.tiles.forEach(function (t) { assert.ok(otto.indexOf(t) !== -1); });
+  return [v.tiles.map(function (t) { return t.id; }).join(' '), v.seconda];
+}
+assert.deepEqual(visibili(undefined, true, 3), ['app1 app2 app3 app4 app5 app6 app7 app8', 3]);
+assert.deepEqual(visibili([], false, 3), ['app1 app2 app3 app4 app5 app6 app7 app8', 0]);
+assert.deepEqual(visibili(['app2', 'app6'], false, 3), ['app1 app3 app4 app5 app7 app8', 0]);
+assert.deepEqual(visibili(['app2', 'app6'], true, 3), ['app1 app3 app4 app5 app7 app8', 2]);
+assert.deepEqual(visibili(['app1', 'app2', 'app3'], true, 3), ['app4 app5 app6 app7 app8', 0]);
+assert.deepEqual(visibili(['app4', 'app5', 'app6', 'app7', 'app8'], true, 3), ['app1 app2 app3', 0]);
+assert.deepEqual(visibili(['app9'], true, 3), ['app1 app2 app3 app4 app5 app6 app7 app8', 3]);
 
 // The clock in the weather city's time. Off: the TV's own hours and minutes, whatever the offset.
 // On: UTC plus the city's offset, so a TV with a wrong time zone and a right UTC shows the city's time.
@@ -714,7 +736,19 @@ function httpChecks() {
       assert.equal(j.pin, undefined); assert.equal(j.pinSet, false); next(); }); },
     function (next) { setTimeout(next, 600); }, // the first start picks the tiles
     function (next) { req('GET', '/api/config', {}, function (st, j) {
-      assert.deepEqual(j.tiles.map(function (t) { return t.id; }), ['netflix', 'amazon', 'youtube.leanback.v4', 'cdp-30', 'spotify-beehive']); next(); }); },
+      assert.deepEqual(j.tiles.map(function (t) { return t.id; }), ['netflix', 'amazon', 'youtube.leanback.v4', 'cdp-30', 'spotify-beehive']);
+      assert.deepEqual(j.appsGone, []); next(); }); },
+    // A tile whose app the TV does not list: in the config, named for the Home to leave out (#19).
+    function (next) { req('GET', '/api/config', {}, function (st0, j0) {
+      var tiles = [{ id: 'netflix', title: 'Netflix' }, { id: 'com.spotify.app', title: 'Spotify' }, { id: 'com.webos.app.hdmi4', title: 'HDMI 4' }];
+      req('POST', '/api/config', json({ tiles: tiles }), function (st, j) {
+        assert.equal(st, 200); assert.deepEqual(j.config.appsGone, ['com.spotify.app']);
+        req('GET', '/api/config', {}, function (st2, j2) {
+          assert.equal(j2.tiles.length, 3); assert.deepEqual(j2.appsGone, ['com.spotify.app']);
+          req('POST', '/api/config', json({ tiles: j0.tiles }), function (st3, j3) { assert.deepEqual(j3.config.tiles, j0.tiles); next(); });
+        });
+      });
+    }); },
     function (next) { req('GET', '/api/config', { host: 'evil.example:18090' }, function (st) { assert.equal(st, 403); next(); }); },
     function (next) { req('POST', '/api/config', { headers: { 'Content-Type': 'text/plain' }, body: '{"clock":"12"}' }, function (st) { assert.equal(st, 415); next(); }); },
     function (next) { var o = json({ clock: '12' }); o.headers.Origin = 'http://evil.example'; req('POST', '/api/config', o, function (st) { assert.equal(st, 415); next(); }); },

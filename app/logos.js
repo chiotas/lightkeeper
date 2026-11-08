@@ -337,6 +337,18 @@ function inizioSeconda(c) {
   return c.twoRows === true && typeof k === 'number' && k % 1 === 0 && k > 0 && k < n ? k : 0;
 }
 
+// The tiles the Home shows: not those whose app the TV no longer lists (#19), which the
+// settings keep. With two rows, the lower one starts after the same tiles as before.
+function tessereVisibili(c) {
+  var via = c.appsGone || [], k = inizioSeconda(c), tiles = [], sopra = 0;
+  (c.tiles || []).forEach(function (t, i) {
+    if (via.indexOf(t.id) !== -1) return;
+    tiles.push(t);
+    if (i < k) sopra++;
+  });
+  return { tiles: tiles, seconda: sopra < tiles.length ? sopra : 0 };
+}
+
 // The clock's hours and minutes. The TV's own time; with the clock in the weather city's time
 // (cityTime) and that city's offset from UTC known, in seconds, UTC plus the offset: right on a TV
 // whose time zone is set wrong, as long as its UTC is right.
