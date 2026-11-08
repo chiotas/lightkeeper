@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **Opening at power on over the Homebrew Channel** ([#22](https://github.com/chiotas/lightkeeper/issues/22)). On an LG 55UH750V with webOS 3.4 and Lightkeeper 1.1.0, after a power cut, the boot hook saw the cold start, but the Homebrew Channel was in front a second after the TV came on, and Lightkeeper does not open over an app that comes up with the TV: the log said `not opening: org.webosbrew.hbchannel is in front`. It now opens over the Homebrew Channel at power on, as over an input or LG's Home. Other apps that come up with the TV stay as before. Tried in the checks; not tried on a TV.
+
 ## 1.1.0 (5 November 2026)
 
 - **The Home key on webOS 2 and 3.** These TVs have no key filters for GlassHouse to use, so up to 1.0.14 the key stayed LG's. Lightkeeper now reads it from the remote itself. The idea comes from [HomeKeyBridge](https://github.com/knives69/HomeKeyBridge), by Deko1988uwu on Reddit (knives69 on GitHub); Lightkeeper's code for it is its own.

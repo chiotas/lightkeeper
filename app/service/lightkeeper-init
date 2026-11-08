@@ -16,12 +16,14 @@ FRONT=/var/lib/lightkeeper/front
 # At power on, Lightkeeper opens over an input, LG's Home or nothing, and over the
 # app that was in front when the TV went off, which webOS puts back (issue: the
 # Homebrew Channel left open stayed in front). Not over an app that came up with
-# the TV: its own button, a cast from a phone, an alarm. $1 in front, $2 the app
-# in front at power off: open, cover, stay or self.
+# the TV: its own button, a cast from a phone, an alarm. The Homebrew Channel is
+# not one of those: on a 55UH750V with webOS 3.4 it was in front a second after a
+# cold start (#22). $1 in front, $2 the app in front at power off: open, cover,
+# stay or self.
 scelta() {
   case "$1" in
     "$APP") echo self ;;
-    ""|com.webos.app.home|com.webos.app.livetv|com.webos.app.inputcommon|com.webos.app.hdmi*) echo open ;;
+    ""|com.webos.app.home|com.webos.app.livetv|com.webos.app.inputcommon|com.webos.app.hdmi*|org.webosbrew.hbchannel) echo open ;;
     *) if [ "$1" = "$2" ]; then echo cover; else echo stay; fi ;;
   esac
 }
