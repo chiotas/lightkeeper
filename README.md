@@ -111,7 +111,7 @@ homeassistant:
   packages: !include_dir_named packages
 ```
 
-A package keeps these sections apart from the `rest:`, `rest_command:` or `template:` you may already have in `configuration.yaml`, where a second section with the same name would replace the first. With a PIN set in Lightkeeper, add `headers:` with `X-Lightkeeper-PIN: !secret lightkeeper_pin` under both the `rest` resource and the `rest_command`. Install does what the Update button in the settings does, and Home Assistant waits up to 200 seconds while the TV downloads and checks the package. Reported working on a CX with webOS 5.6.2 ([#18](https://github.com/chiotas/lightkeeper/issues/18)); Install itself is untried until the next release.
+A package keeps these sections apart from the `rest:`, `rest_command:` or `template:` you may already have in `configuration.yaml`, where a second section with the same name would replace the first. With a PIN set in Lightkeeper, add `headers:` with `X-Lightkeeper-PIN: !secret lightkeeper_pin` under both the `rest` resource and the `rest_command`. Install does what the Update button in the settings does, and Home Assistant waits up to 200 seconds while the TV downloads and checks the package. Reported working on a CX with webOS 5.6.2 and a 50UA74006LB with webOS 10.3.1: Home Assistant showed 1.1.1 on both, and Install updated Lightkeeper remotely ([#18](https://github.com/chiotas/lightkeeper/issues/18)).
 
 ## Remove it
 
